@@ -18,19 +18,23 @@
     return NULL;                                                \
   }
 
+// Stores log-factorials.
 std::vector<double> facs = {0};
 
+// Fills the log-factorials cache up to i.
 void fill_facs(int i) {
   for (int j = facs.size(); j <= i; j++) {
     facs.push_back(facs[j - 1] + log(j));
   }
 }
 
+// Returns the value of a single contingency table configuration.
 double fisher_single_step(int a, int b, int c, int d, int n) {
   return exp(facs[a + b] + facs[c + d] + facs[a + c] + facs[b + d] - facs[n] -
              facs[a] - facs[b] - facs[c] - facs[d]);
 }
 
+// Returns the p-value of a "greater" test (a getting a higher value).
 double fisher_greater(int a, int b, int c, int d, int n) {
   double p = 0;
   while (b >= 0 && c >= 0) {
@@ -43,6 +47,7 @@ double fisher_greater(int a, int b, int c, int d, int n) {
   return p;
 }
 
+// Returns the p-value of a "less" test (a getting a lower value).
 double fisher_less(int a, int b, int c, int d, int n) {
   double p = 0;
   while (a >= 0 && d >= 0) {
@@ -55,6 +60,7 @@ double fisher_less(int a, int b, int c, int d, int n) {
   return p;
 }
 
+// Returns the p-value of a "two-sided" test (how likely to be less likely).
 double fisher_two_sided(int a, int b, int c, int d, int n) {
   double orig_p = fisher_single_step(a, b, c, d, n);
   int orig_a = a;
@@ -100,6 +106,7 @@ double fisher_two_sided(int a, int b, int c, int d, int n) {
   return p;
 }
 
+// API function for fisher testing.
 PyObject* fisher(PyObject* self, PyObject* args) {
   int a, b, c, d;
   const char* s = TEST_TWO_SIDED;
@@ -143,6 +150,7 @@ PyObject* fisher(PyObject* self, PyObject* args) {
   return Py_BuildValue("dd", odr, p);
 }
 
+// API function for clearing the log-factorial cache.
 PyObject* reset(PyObject* self, PyObject* args) {
   if (!PyArg_ParseTuple(args, "")) {
     return NULL;

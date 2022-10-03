@@ -3,7 +3,7 @@ from myfisher import fisher
 from scipy.stats import fisher_exact
 
 
-class TestNICUHelper(unittest.TestCase):
+class TestFisher(unittest.TestCase):
     def test_fisher(self):
         tests = [
             [1, 1, 1, 1],
