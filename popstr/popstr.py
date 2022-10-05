@@ -1,7 +1,6 @@
 import json
 import os
 from collections import defaultdict
-from glob import glob
 
 import numpy as np
 import pandas as pd
@@ -16,30 +15,31 @@ setproctitle('popstr')
 plt.style.use('ggplot')
 
 # Fill these.
-FILES = ''
-OUTPUT_FILE = ''
-TMP_DIR = ''
+INPUT_JSON = '/tmp/amitmit/has.json'
+OUTPUT_FILE = '/tmp/amitmit/comps.json'
+TMP_DIR = '/tmp/amitmit'
 
 
-def read_rand_sets(n=None) -> pd.DataFrame:
-    """Reads kmers from grabforpopstr output."""
-    files = glob(FILES)
-    if n:
-        files = files[:n]
-    fname = f'{TMP_DIR}/table_{len(files)}.h5'
-    if os.path.exists(fname):
+def read_has_json(n=None) -> pd.DataFrame:
+    """Reads kmers from hastojson output."""
+    h5_fname = f'{TMP_DIR}/table.h5'
+    if os.path.exists(h5_fname):
         print('Loading h5')
-        return pd.read_hdf(fname)
-    lists = (json.load(open(f)) for f in files)
-    dicts = ({x: 1 for x in ls} for ls in lists)
+        return pd.read_hdf(h5_fname)
+    raw = (json.loads(line) for line in open(INPUT_JSON))
+    dicts = ({
+        'kmer': line['kmer'],
+        **{x: 1
+           for x in line['samples']}
+    } for line in raw)
     print('Building dataframe')
-    df = pd.DataFrame(dicts)
+    df = pd.DataFrame(dicts).set_index('kmer').transpose()
     print('Fixing NAs')
     df.replace(np.NaN, 0, inplace=True)
     print('Converting type')
     df = df.astype('int8')
     print('Saving h5')
-    df.to_hdf(fname, 'default')
+    df.to_hdf(h5_fname, 'default')
     return df
 
 
@@ -109,7 +109,7 @@ def groupby(items, key_func, value_func):
 
 def create_final_pca(n):
     """Creates the final projection matrix for use in downstream analysis."""
-    m = read_rand_sets()
+    m = read_has_json()
     header = list(m.columns)
     m = m.values
     print('Shape:', m.shape)
@@ -133,11 +133,11 @@ def create_final_pca(n):
     json.dump(evr.tolist(), open(evr_file, 'wt'))
 
 
-if False:
+if True:
     create_final_pca(10)
     exit()
 
-m = read_rand_sets()
+m = read_has_json()
 m = m.values
 print('Shuffling')
 m = shuffle_rows_cols(m)
