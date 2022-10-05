@@ -14,10 +14,12 @@ from sklearn.preprocessing import StandardScaler
 setproctitle('popstr')
 plt.style.use('ggplot')
 
+# TODO(amit): Make the constants command-line arguments.
+
 # Fill these.
-INPUT_JSON = '/tmp/amitmit/has.json'
-OUTPUT_FILE = '/tmp/amitmit/comps.json'
-TMP_DIR = '/tmp/amitmit'
+INPUT_JSON = 'TODO/has.json'
+OUTPUT_FILE = 'TODO/popstr_components.json'
+TMP_DIR = 'TODO'
 
 
 def read_has_json(n=None) -> pd.DataFrame:
@@ -133,10 +135,12 @@ def create_final_pca(n):
     json.dump(evr.tolist(), open(evr_file, 'wt'))
 
 
+# TODO(amit): Make this a command-line argument.
 if True:
     create_final_pca(10)
     exit()
 
+# TODO(amit): Automate this process.
 m = read_has_json()
 m = m.values
 print('Shuffling')

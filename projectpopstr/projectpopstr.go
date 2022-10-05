@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/fluhus/kmers/aio"
-	"github.com/fluhus/kmers/kmc"
-	"github.com/fluhus/kmers/kmr"
-	"github.com/fluhus/kmers/progress"
-	"github.com/fluhus/kmers/util"
+	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/kwas/kmc"
+	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/progress"
+	"github.com/fluhus/kwas/util"
 )
 
 var (

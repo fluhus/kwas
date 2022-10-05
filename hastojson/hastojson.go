@@ -6,14 +6,14 @@ import (
 	"fmt"
 
 	"github.com/fluhus/biostuff/sequtil"
-	"github.com/fluhus/kmers/aio"
-	"github.com/fluhus/kmers/kmr"
-	"github.com/fluhus/kmers/util"
+	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/util"
 )
 
 var (
-	in  = flag.String("i", "", "Input file")
-	out = flag.String("o", "", "Output file")
+	in  = flag.String("i", "", "Input HAS file")
+	out = flag.String("o", "", "Output JSON file")
 )
 
 func main() {
