@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	exePath = "/home/amitmit/Data/genie/LabData/Analyses/amitmit/tools/kmc/kmc"
+	exePath = "kmc"
 )
 
 type reader struct {
@@ -36,7 +36,7 @@ func (r *reader) Close() error {
 }
 
 func runKMC(fq string, k int) (io.ReadCloser, error) {
-	dir, err := os.MkdirTemp("", "amitmit_kmc_")
+	dir, err := os.MkdirTemp("", "kmc_")
 	if err != nil {
 		return nil, err
 	}

@@ -58,12 +58,6 @@ func main() {
 	}
 	util.Die(saveProfiles(fprc, prc))
 	fmt.Println("Took", time.Since(t))
-
-	// var entss []float64
-	// for _, p := range ps {
-	// 	entss = append(entss, ents[p])
-	// }
-	// aio.ToJSON("/tmp/amitmit/entropies.json", entss)
 }
 
 func loadProfiles(file string) ([]*kmr.ProfileTuple, error) {

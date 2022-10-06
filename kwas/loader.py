@@ -1,7 +1,6 @@
 """Loader for kmer presence/absence ("has")."""
 from ctypes import CDLL, POINTER, Structure, c_bool, c_char_p, c_int8, \
     c_size_t, c_uint64, c_void_p, cast
-from datetime import datetime
 import json
 from typing import List
 
@@ -164,32 +163,3 @@ _del_strings.argtypes = [Strings]
 
 _del_has = _lib.delHas
 _del_has.argtypes = [KmerHas]
-
-
-def _sanity_check():
-    """A simple check to verify that the loader works."""
-    print('Creating loader')
-    t = datetime.now()
-    ld = KmerHasLoader(
-        '/home/amitmit/Data/genie/LabData/Analyses/amitmit/kmers/samples_d2.txt',
-        '/home/amitmit/Data/mb/amitmit/kmers/maf/1.has.gz')
-    print(datetime.now() - t)
-
-    df = ld.get_data().df
-    print(df.attrs)
-    print(df.sum())
-    df = ld.get_data().df
-    print(df.attrs)
-    print(df.sum())
-
-    print('Testing load speed')
-    n = 1000
-    t = datetime.now()
-    for _ in range(n):
-        ld.get_data()
-    d = datetime.now() - t
-    print(f'{d} ({d/n} per item)')
-
-
-if __name__ == '__main__':
-    _sanity_check()

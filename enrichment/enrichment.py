@@ -47,8 +47,8 @@ def pie_params(a):
 
 def by_species():
     print('by_species2')
-    tax = pd.read_csv('/tmp/amitmit/taxonomy.csv.gz')
-    d = json.load(gzip.open('/tmp/amitmit/fishers.bwt.json.gz'))
+    tax = pd.read_csv('taxonomy.csv.gz')
+    d = json.load(gzip.open('fishers.bwt.json.gz'))
     sig_species = set(d['sig'])
     found_species = set(d['found'])
     del d
@@ -80,7 +80,7 @@ def by_species():
 
 def by_kegg():
     print('Loading tests')
-    d = json.load(gzip.open('/tmp/amitmit/fishers.dmnd.json.gz'))
+    d = json.load(gzip.open('fishers.dmnd.json.gz'))
     enrch = frozenset(d['sig'])
     found = frozenset(d['found'])
     nfound, nenrch = len(found), len(enrch)
@@ -126,7 +126,7 @@ def by_kegg():
             'fisher': fishes,
             'noko': nopwy
         },
-        gzip.open('/tmp/amitmit/ko.json.gz', 'wt'),
+        gzip.open('ko.json.gz', 'wt'),
         indent=2,
     )
 
@@ -136,7 +136,7 @@ def restore_inf(x):
 
 
 def post_kegg():
-    data = json.load(gzip.open('/tmp/amitmit/ko.json.gz'))
+    data = json.load(gzip.open('ko.json.gz'))
     data = data['fisher']
     for x in data:
         x['odr'] = restore_inf(x['odr'])
