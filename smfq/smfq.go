@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	nThreads   = 1
 	kmerIterGC = false // Run GC occasionally when loading kmers.
 )
 
@@ -36,11 +35,10 @@ var (
 	kmersFile = flag.String("k", "", "Kmers file `path`")
 	outFile   = flag.String("o", "", "Output file `path`")
 	nameRE    = flag.String("x", "", "Name `regex` to capture")
+	nThreads  = flag.Int("t", 1, "Number of threads")
 )
 
 func main() {
-	fmt.Println("Running gene-kmer counting")
-
 	flag.Parse()
 
 	var re *regexp.Regexp
@@ -80,7 +78,7 @@ func main() {
 				gene string
 				idx  int
 			}
-			err = ppln.NonSerial(nThreads,
+			err = ppln.NonSerial(*nThreads,
 				func(push func(a fqsm), stop func() bool) error {
 					for {
 						if stop() {
@@ -160,7 +158,7 @@ func main() {
 				gene string
 				idx  int
 			}
-			err = ppln.NonSerial(nThreads,
+			err = ppln.NonSerial(*nThreads,
 				func(push func(a fqsm), stop func() bool) error {
 					for {
 						if stop() {

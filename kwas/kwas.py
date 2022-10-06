@@ -82,7 +82,7 @@ def main():
     setproctitle('kwas')
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('-i', required=True, help="Input file")
+    arg_parser.add_argument('-i', required=True, help="Input HAS file")
     arg_parser.add_argument('-o', required=True, help="Output file")
     arg_parser.add_argument('-c', required=True, help="Covariates file")
     arg_parser.add_argument('-s', required=True, help="Samples file")
