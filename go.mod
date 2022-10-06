@@ -9,7 +9,3 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 )
-
-// replace github.com/fluhus/gostuff => /home/amitmit/Desktop/gostuff/src
-
-// replace github.com/fluhus/biostuff => /home/amitmit/Desktop/golgi/src
