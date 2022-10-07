@@ -171,14 +171,10 @@ smfqmerge -i "file*.nonsignificant.json" -o merged.nonsignificant.json
 
 #### 4.4. Run hypergeometric tests
 
-Compile the Fisher library:
-
 ```bash
-make -C fisher
+python smgqhg -s merged.significant.json -n merged.nonsignificant.json -o rnames.json
 ```
 
-Edit `smfqhg/smfqhg.py` and set the constants with the input and output files.
-
-```bash
-python smgqhg/smfqhg.py
-```
+Creates a JSON object where `sig` contains a list of reference names that were
+enriched with significant associations,
+and `found` contains all the reference names that were encountered.
