@@ -111,24 +111,21 @@ projectpopstr -c components.json -i file_123.fq -o file_123.popstr.json
 
 #### 3.1. Create covariates table
 
-Create an `.h5` file where the rows are samples and columns are covariates.
+Create a pandas `.h5` file where the rows are samples and columns are
+covariates.
 Add the population structure projections to this matrix.
+The rows should match the order of samples in `files.txt` that was generated
+in 1.1.
 
-#### 3.2. Create sample mapping
-
-Create a JSON file that contains a map from sample file to sample name
-in the covariates table.
-Edit `kwas/loader.py` and set `_SAMPLE_MAPPING_FILE` to that JSON file.
-
-#### 3.3. Run KWAS
+#### 3.2. Run KWAS
 
 For each file `f` in `has_part_*_centers.gz`:
 
 ```bash
-python kwas/kwas.py -i $f -o $f.kwas.csv -c covariates.h5 -s files.txt
+python kwas/kwas.py -i $f -o $f.kwas.csv -c covariates.h5 -x hastojson
 ```
 
-#### 3.4. Collect significant associations
+#### 3.3. Collect significant associations
 
 Assuming significance threshold `p`, for each KWAS output file:
 
@@ -137,7 +134,7 @@ postkwas -i $f -o $f.significant -p $p
 postkwas -i $f -o $f.nonsignificant -p $p -n
 ```
 
-#### 3.5. Extract lists of significant and nonsignificant k-mers
+#### 3.4. Extract lists of significant and nonsignificant k-mers
 
 For each file `f` from the previous stage:
 
