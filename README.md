@@ -8,11 +8,10 @@ K-mer-wide association study.
   - sklearn
   - matplotlib
   - logomaker
+  - setproctitle
 - [KMC 3](https://github.com/refresh-bio/KMC/releases)
 - [Bowtie 2](https://github.com/BenLangmead/bowtie2/releases)
 - [Diamond](https://github.com/bbuchfink/diamond/releases)
-- GCC (on Windows use [msys2](https://www.msys2.org/);
-  working on removing this requirement)
 
 ## Usage
 
