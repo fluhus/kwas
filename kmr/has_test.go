@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"golang.org/x/exp/slices"
 )
 
 func TestPrabCountAdd(t *testing.T) {
@@ -52,5 +54,40 @@ func TestPrabCountEncode(t *testing.T) {
 	}
 	if !reflect.DeepEqual(a, c) {
 		t.Fatalf("Decode()=%v, want %v", c, a)
+	}
+}
+
+func TestHasTupleEncode(t *testing.T) {
+	tup := &HasTuple{
+		Kmer:    FullKmer{},
+		Samples: []int{5, 8, 0, 7, 1},
+	}
+	want := &HasTuple{
+		Kmer:    FullKmer{},
+		Samples: []int{0, 1, 5, 7, 8},
+	}
+
+	buf := &bytes.Buffer{}
+	if err := tup.Encode(buf); err != nil {
+		t.Fatalf("Encode() failed: %v", err)
+	}
+	got := &HasTuple{}
+	if err := got.Decode(buf); err != nil {
+		t.Fatalf("Decode() failed: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Decode()=%v, want %v", got, want)
+	}
+}
+
+func TestDiffs(t *testing.T) {
+	a := []int{5, 10, 13, 27, 100}
+	b := []uint64{5, 5, 3, 14, 73}
+
+	if got := toDiffs(slices.Clone(a)); !slices.Equal(b, got) {
+		t.Fatalf("toDiffs(%v)=%v, want %v", a, got, b)
+	}
+	if got := fromDiffs(b); !slices.Equal(got, a) {
+		t.Fatalf("fromDiffs(%v)=%v, want %v", b, got, a)
 	}
 }
