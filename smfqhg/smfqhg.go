@@ -7,8 +7,9 @@ import (
 	"io"
 	"runtime"
 
+	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/gofisher"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
@@ -67,7 +68,7 @@ func main() {
 	slices.Sort(found)
 
 	fmt.Println("Writing to:", *outf)
-	util.Die(aio.ToJSON(*outf,
+	util.Die(jio.Save(*outf,
 		map[string][]string{"sig": sig, "found": found}))
 }
 

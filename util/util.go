@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"github.com/fluhus/biostuff/sequtil"
-	"github.com/fluhus/gostuff/gzipf"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/spaolacci/murmur3"
 	"golang.org/x/exp/constraints"
 )
@@ -30,7 +30,7 @@ func OpenOrStdin(f string, stdin string) (io.ReadCloser, error) {
 	if f == stdin {
 		return os.Stdin, nil
 	}
-	return gzipf.Open(f)
+	return aio.Open(f)
 }
 
 var hash64 = murmur3.New64()
@@ -79,7 +79,7 @@ func ChooseStrings(s []string, p, np int) ([]string, []int) {
 }
 
 func SaveGob(file string, v interface{}) error {
-	f, err := gzipf.Create(file)
+	f, err := aio.Create(file)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func SaveGob(file string, v interface{}) error {
 }
 
 func LoadGob(file string, v interface{}) error {
-	f, err := gzipf.Open(file)
+	f, err := aio.Open(file)
 	if err != nil {
 		return err
 	}
@@ -234,4 +234,12 @@ func NTiles[S ~[]E, E constraints.Ordered](n int, s S) S {
 // Checks if a byte equals N or n.
 func isN(b byte) bool {
 	return b == 'N' || b == 'n'
+}
+
+// NotExpectingEOF turns EOF into ErrUnexpectedEOF.
+func NotExpectingEOF(err error) error {
+	if err == io.EOF {
+		return io.ErrUnexpectedEOF
+	}
+	return err
 }

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/fluhus/biostuff/sequtil"
-	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"

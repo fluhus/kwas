@@ -8,26 +8,21 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/progress"
 )
 
 // Tuple is a type that has a kmer and some data related to that kmer.
 type Tuple interface {
-	GetKmer() []byte         // Returns the tuple's kmer
-	Encode(aio.Writer) error // Writes the tuple
-	Decode(aio.Reader) error // Loads a tuple into this object
-	Add(Tuple)               // Adds another tuple of the same kmer to this
-	Copy() Tuple             // Deep-copies the tuple
+	GetKmer() []byte            // Returns the tuple's kmer
+	Encode(io.Writer) error     // Writes the tuple
+	Decode(io.ByteReader) error // Loads a tuple into this object
+	Add(Tuple)                  // Adds another tuple of the same kmer to this
+	Copy() Tuple                // Deep-copies the tuple
 }
 
 // TupleFromString returns a Tuple that matches the given string.
 func TupleFromString(s string) Tuple {
 	switch s {
-	case "count":
-		return &CountTuple{}
-	case "maf":
-		return &MAFTuple{}
 	case "has":
 		return &HasTuple{}
 	case "hac":
@@ -43,12 +38,12 @@ func TupleFromString(s string) Tuple {
 
 // An iterator over kmer tuples from an input stream.
 type kmerIter struct {
-	r   aio.Reader
+	r   io.ByteReader
 	cur Tuple
 }
 
 // Creates a new iterator over the given input.
-func newKmerIter(r aio.Reader, t Tuple) (*kmerIter, error) {
+func newKmerIter(r io.ByteReader, t Tuple) (*kmerIter, error) {
 	it := &kmerIter{r: r, cur: t}
 	err := it.next()
 	if err != nil {
@@ -74,7 +69,7 @@ func (it *kmerIter) String() string {
 type Merger []*kmerIter
 
 // Add adds an input stream to be merged by this merger.
-func (m *Merger) Add(r aio.Reader, t Tuple) error {
+func (m *Merger) Add(r io.ByteReader, t Tuple) error {
 	it, err := newKmerIter(r, t)
 	if err != nil {
 		return err
@@ -119,7 +114,7 @@ func (m *Merger) nextMin() error {
 }
 
 // Dump merges all the remaining kmer tuples and writes them to the given writer.
-func (m *Merger) Dump(w aio.Writer) error {
+func (m *Merger) Dump(w io.Writer) error {
 	n := 0
 	pt := progress.NewTimerFunc(func(i int) string {
 		return fmt.Sprintf("%d kmers dumped", i)

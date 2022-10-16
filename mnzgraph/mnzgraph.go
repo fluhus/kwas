@@ -12,9 +12,10 @@ import (
 	"strings"
 
 	"github.com/fluhus/biostuff/sequtil"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/gnum"
+	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/gostuff/ppln"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/graphs"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
@@ -159,7 +160,7 @@ func main() {
 		}
 
 		fmt.Println("Saving")
-		aio.ToJSON(*joutput, toJSON)
+		jio.Save(*joutput, toJSON)
 	}
 }
 

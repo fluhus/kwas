@@ -2,9 +2,9 @@ package kmr
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/fluhus/gostuff/bnry"
-	"github.com/fluhus/kwas/aio"
 )
 
 // HasCount counts how many samples have a kmer.
@@ -29,11 +29,11 @@ func (p *HasCount) Copy() Tuple {
 	return &HasCount{p.Kmer, p.Count}
 }
 
-func (p *HasCount) Encode(w aio.Writer) error {
+func (p *HasCount) Encode(w io.Writer) error {
 	return bnry.Write(w, p.Kmer[:], p.Count)
 }
 
-func (p *HasCount) Decode(r aio.Reader) error {
+func (p *HasCount) Decode(r io.ByteReader) error {
 	var b []byte
 	if err := bnry.Read(r, &b, &p.Count); err != nil {
 		return err

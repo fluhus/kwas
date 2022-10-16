@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/kwas/kmc"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
@@ -39,7 +40,7 @@ func main() {
 	pt.Done()
 
 	fmt.Println("Writing projection")
-	util.Die(aio.ToJSON(*fout, vals))
+	util.Die(jio.Save(*fout, vals))
 
 	fmt.Println("Done")
 }

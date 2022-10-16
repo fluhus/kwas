@@ -5,7 +5,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/gostuff/aio"
 )
 
 // IterTuplesFile iterates the given file, calling forEach on each tuple.

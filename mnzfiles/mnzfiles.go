@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluhus/kwas/aio"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/maps"

@@ -1,10 +1,10 @@
 package kmr
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 
-	"github.com/fluhus/kwas/aio"
 	"golang.org/x/exp/slices"
 )
 
@@ -146,7 +146,7 @@ func TestProfileTupleEncode(t *testing.T) {
 	want := &ProfileTuple{}
 	*want = *input
 
-	buf := aio.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	if err := input.Encode(buf); err != nil {
 		t.Fatalf("Encode() failed: %v", err)
 	}

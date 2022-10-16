@@ -14,9 +14,9 @@ import (
 	"github.com/fluhus/biostuff/formats/fastq"
 	"github.com/fluhus/biostuff/formats/sam"
 	"github.com/fluhus/biostuff/sequtil"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/ppln"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
@@ -90,10 +90,10 @@ func main() {
 							if ef == io.EOF && es == io.EOF {
 								break
 							}
-							if err := aio.NotExpectingEOF(ef); err != nil {
+							if err := util.NotExpectingEOF(ef); err != nil {
 								return err
 							}
-							if err := aio.NotExpectingEOF(es); err != nil {
+							if err := util.NotExpectingEOF(es); err != nil {
 								return err
 							}
 						}

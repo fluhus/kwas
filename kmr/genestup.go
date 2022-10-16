@@ -2,9 +2,10 @@ package kmr
 
 import (
 	"fmt"
+	"io"
 
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/aio"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -18,24 +19,14 @@ func (t *GeneSetTuple) GetKmer() []byte {
 	return t.Kmer[:]
 }
 
-func (t *GeneSetTuple) Encode(w aio.Writer) error {
-	if err := aio.WriteBytes(w, t.Kmer[:]); err != nil {
-		return err
-	}
-	if err := aio.WriteUvarint(w, uint64(len(t.Genes))); err != nil {
-		return err
-	}
-	for g := range t.Genes {
-		if err := aio.WriteString(w, g); err != nil {
-			return err
-		}
-	}
-	return nil
+func (t *GeneSetTuple) Encode(w io.Writer) error {
+	return bnry.Write(w, t.Kmer[:], t.Genes)
 }
 
-func (t *GeneSetTuple) Decode(r aio.Reader) error {
-	b, err := aio.ReadBytes(r)
-	if err != nil {
+func (t *GeneSetTuple) Decode(r io.ByteReader) error {
+	var b []byte
+	var s []string
+	if err := bnry.Read(r, &b, &s); err != nil {
 		return err
 	}
 	if len(b) != len(t.Kmer) {
@@ -43,18 +34,7 @@ func (t *GeneSetTuple) Decode(r aio.Reader) error {
 			len(b), len(t.Kmer))
 	}
 	t.Kmer = *(*FullKmer)(b)
-	n, err := aio.ReadUvarint(r)
-	if err != nil {
-		return err
-	}
-	t.Genes = make(sets.Set[string], n)
-	for i := uint64(0); i < n; i++ {
-		g, err := aio.ReadString(r)
-		if err != nil {
-			return err
-		}
-		t.Genes.Add(g)
-	}
+	t.Genes = sets.Set[string]{}.Add(s...)
 	return nil
 }
 

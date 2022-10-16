@@ -2,13 +2,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"math"
 	"os"
 
 	"github.com/fluhus/gostuff/gnum"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/util"
 )
@@ -22,7 +22,7 @@ func main() {
 	var err error
 	i := 0
 
-	r := aio.WrapReader(os.Stdin)
+	r := bufio.NewReader(os.Stdin)
 	j := json.NewEncoder(os.Stdout)
 
 	for err = t.Decode(r); err == nil; err = t.Decode(r) {

@@ -7,14 +7,10 @@ import (
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/gnum"
-	"github.com/fluhus/kwas/aio"
 )
 
 const (
 	maxReadLen = 100
-
-	// Changed the format of profiles. Set to false to work with old profiles.
-	encodeWithBnry = false
 )
 
 type Profile [maxReadLen*2 + K][4]int64
@@ -132,82 +128,32 @@ func (t *ProfileTuple) GetKmer() []byte {
 	return t.Kmer[:]
 }
 
-func (t *ProfileTuple) Encode(w aio.Writer) error {
-	if encodeWithBnry {
-		return bnry.Write(w, t.Kmer[:], t.P.flatten(), t.C[:])
-	}
-	if err := aio.WriteBytes(w, t.Kmer[:]); err != nil {
-		return fmt.Errorf("encode ProfileTuple: %v", err)
-	}
-	for i := range t.P {
-		for j := range t.P[i] {
-			if err := aio.WriteUvarint(w, uint64(t.P[i][j])); err != nil {
-				return fmt.Errorf("encode ProfileTuple: %v", err)
-			}
-		}
-	}
-	for i := range t.C {
-		if err := aio.WriteUvarint(w, uint64(t.C[i])); err != nil {
-			return fmt.Errorf("encode ProfileTuple: %v", err)
-		}
-	}
-	return nil
+func (t *ProfileTuple) Encode(w io.Writer) error {
+	return bnry.Write(w, t.Kmer[:], t.P.flatten(), t.C[:])
+
 }
 
-func (t *ProfileTuple) Decode(r aio.Reader) error {
-	if encodeWithBnry {
-		var kmer []byte
-		var p, c []int64
-		if err := bnry.Read(r, &kmer, &p, &c); err != nil {
-			return err
-		}
-		if len(kmer) != len(t.Kmer) {
-			return fmt.Errorf("unexpected kmer length: %d, want %d",
-				len(kmer), len(t.Kmer))
-		}
-		if len(p) != len(t.P)*len(t.P[0]) {
-			return fmt.Errorf("unexpected profile length: %d, want %d",
-				len(p), len(t.P))
-		}
-		if len(c) != len(t.C) {
-			return fmt.Errorf("unexpected counts length: %d, want %d",
-				len(c), len(t.C))
-		}
-		copy(t.Kmer[:], kmer)
-		copy(t.C[:], c)
-		t.P.unflatten(p)
-		return nil
-	}
-	kmer, err := aio.ReadBytes(r)
-	if err == io.EOF {
+func (t *ProfileTuple) Decode(r io.ByteReader) error {
+	var kmer []byte
+	var p, c []int64
+	if err := bnry.Read(r, &kmer, &p, &c); err != nil {
 		return err
 	}
-	if err != nil {
-		return fmt.Errorf("decode ProfileTuple: %v", err)
-	}
 	if len(kmer) != len(t.Kmer) {
-		return fmt.Errorf("decode ProfileTuple: bad kmer length: %v, want %v",
+		return fmt.Errorf("unexpected kmer length: %d, want %d",
 			len(kmer), len(t.Kmer))
 	}
+	if len(p) != len(t.P)*len(t.P[0]) {
+		return fmt.Errorf("unexpected profile length: %d, want %d",
+			len(p), len(t.P))
+	}
+	if len(c) != len(t.C) {
+		return fmt.Errorf("unexpected counts length: %d, want %d",
+			len(c), len(t.C))
+	}
 	copy(t.Kmer[:], kmer)
-	for i := range t.P {
-		for j := range t.P[i] {
-			n, err := aio.ReadUvarint(r)
-			if err != nil {
-				return fmt.Errorf("decode ProfileTuple: %v",
-					aio.NotExpectingEOF(err))
-			}
-			t.P[i][j] = int64(n)
-		}
-	}
-	for i := range t.C {
-		n, err := aio.ReadUvarint(r)
-		if err != nil {
-			return fmt.Errorf("decode ProfileTuple: %v",
-				aio.NotExpectingEOF(err))
-		}
-		t.C[i] = int64(n)
-	}
+	copy(t.C[:], c)
+	t.P.unflatten(p)
 	return nil
 }
 

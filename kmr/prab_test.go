@@ -1,10 +1,9 @@
 package kmr
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
-
-	"github.com/fluhus/kwas/aio"
 )
 
 func TestPrabCountAdd(t *testing.T) {
@@ -41,7 +40,7 @@ func TestPrabCountEncode(t *testing.T) {
 	a := &HasCount{FullKmer{1, 2, 3, 4}, 123}
 	b := &HasCount{FullKmer{1, 2, 3, 4}, 123}
 	c := &HasCount{}
-	buf := aio.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	if err := b.Encode(buf); err != nil {
 		t.Fatalf("%v.Encode() failed: %v", b, err)
 	}

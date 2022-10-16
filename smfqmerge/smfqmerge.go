@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/gmerge"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"

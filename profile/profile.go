@@ -8,8 +8,8 @@ import (
 
 	"github.com/fluhus/biostuff/formats/fastq"
 	"github.com/fluhus/biostuff/sequtil"
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/aio"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
