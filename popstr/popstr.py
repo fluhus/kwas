@@ -1,47 +1,83 @@
 import json
 import os
+from argparse import ArgumentParser
 from collections import defaultdict
+from itertools import islice
+from os.path import join
+from subprocess import PIPE, Popen
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
-from setproctitle import setproctitle
+from scipy.sparse import load_npz, save_npz
 from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
 from sklearn.preprocessing import StandardScaler
 
-setproctitle('popstr')
 plt.style.use('ggplot')
 
-# TODO(amit): Make the constants command-line arguments.
-
-# Fill these.
-INPUT_JSON = 'TODO/has.json'
-OUTPUT_FILE = 'TODO/popstr_components.json'
-TMP_DIR = 'TODO'
+# TODO(amit): Make PCAs run on entire matrix and use disjoint cells.
+# TODO(amit): Put main code in a function.
 
 
-def read_has_json(n=None) -> pd.DataFrame:
-    """Reads kmers from hastojson output."""
-    h5_fname = f'{TMP_DIR}/table.h5'
-    if os.path.exists(h5_fname):
-        print('Loading h5')
-        return pd.read_hdf(h5_fname)
-    raw = (json.loads(line) for line in open(INPUT_JSON))
-    dicts = ({
-        'kmer': line['kmer'],
-        **{x: 1
-           for x in line['samples']}
-    } for line in raw)
+def try_setproctitle():
+    """Sets the process name if the setproctitle library is available."""
+    try:
+        from setproctitle import setproctitle
+    except ModuleNotFoundError:
+        return
+    setproctitle('popstr')
+
+
+def save_sparse_df(df: pd.DataFrame, path: str):
+    """Saves a sparse dataframe to a file."""
+    save_npz(path + '.npz', df.sparse.to_coo())
+    json.dump([df.index.tolist(), df.columns.tolist()],
+              open(path + '.json', 'wt'))
+
+
+def load_sparse_df(path: str) -> pd.DataFrame:
+    """Loads a sparse dataframe from a file."""
+    df = pd.DataFrame.sparse.from_spmatrix(load_npz(path + '.npz'))
+    df.index, df.columns = json.load(open(path + '.json'))
+    return df
+
+
+def read_has() -> Iterable[dict]:
+    """Reads a HAS file and returns an iterable of kmers."""
+    p = Popen(['hastojson', '-i', infile], text=True, stdout=PIPE)
+    return (json.loads(line) for line in p.stdout)
+
+
+def read_df(short: int = None) -> pd.DataFrame:
+    """Reads a samples*kmers dataframe from a HAS file."""
+    fname = join(outdir, 'popstr_df')
+    if os.path.exists(fname + '.npz'):
+        print('Loading npz')
+        return load_sparse_df(fname)
+    raw = read_has()
+    if short:
+        raw = islice(raw, short)
+
+    # Separate kmers from samples.
+    kmers = []
+    dicts = ([
+        kmers.append(obj['kmer']),
+        {x: 1
+         for x in obj['samples']},
+    ][1] for obj in raw)
+
     print('Building dataframe')
-    df = pd.DataFrame(dicts).set_index('kmer').transpose()
+    df = pd.DataFrame(dicts, dtype=float)
+    df.index = kmers
     print('Fixing NAs')
-    df.replace(np.NaN, 0, inplace=True)
+    df.replace(np.nan, 0, inplace=True)
     print('Converting type')
-    df = df.astype('int8')
-    print('Saving h5')
-    df.to_hdf(h5_fname, 'default')
+    df = df.transpose().astype('Sparse[int8]')
+    print('Saving')
+    save_sparse_df(df, fname)
     return df
 
 
@@ -63,7 +99,8 @@ def mini_pca(a, rows, cols, b=None, n=2):
     indexes."""
     if b is None:
         b = a
-    return PCA(n).fit(a[rows][:, cols]).transform(b[:, cols])
+    return StandardScaler().fit_transform(
+        PCA(n).fit(a[rows][:, cols]).transform(b[:, cols]))
 
 
 def my_mds(x, n=2):
@@ -93,7 +130,6 @@ def subset(a, b):
 def pca_distances(rows, cols, drows, n=2):
     """Returns an array of pairwise distances of elements in m after PCA."""
     mini = mini_pca(m, rows, cols, b=m2, n=n)
-    mini = StandardScaler().fit_transform(mini)
     mini = mini[drows]
     d = np.array(
         [norm(u - v) for i, u in enumerate(mini) for v in mini[i + 1:]])
@@ -111,50 +147,30 @@ def groupby(items, key_func, value_func):
 
 def create_final_pca(n):
     """Creates the final projection matrix for use in downstream analysis."""
-    m = read_has_json()
-    header = list(m.columns)
-    m = m.values
-    print('Shape:', m.shape)
-    print('PCA')
-    pca = PCA(n).fit(m)
-    del m
+    print('Creating final PCA')
+    pca = PCA(n).fit(df.values)
 
     comp = pca.components_
     evr = pca.explained_variance_ratio_
     print('Explained variance:', evr, 'Sum:', evr.sum())
     del pca
 
-    print('Writing to ' + OUTPUT_FILE)
-    with open(OUTPUT_FILE, 'wt') as f:
+    fout = join(outdir, 'popstr.json')
+    print('Writing to ' + fout)
+    header = df.columns.tolist()
+    with open(fout, 'wt') as f:
         for row in comp:
             json.dump({h: v for h, v in zip(header, row)}, f)
             f.write('\n')
 
-    evr_file = OUTPUT_FILE[:-5] + '.explnvrnc.json'
+    evr_file = fout[:-5] + '.explnvrnc.json'
     print('Writing explained variance to:', evr_file)
     json.dump(evr.tolist(), open(evr_file, 'wt'))
 
 
-# TODO(amit): Make this a command-line argument.
-if True:
-    create_final_pca(10)
-    exit()
-
-# TODO(amit): Automate this process.
-m = read_has_json()
-m = m.values
-print('Shuffling')
-m = shuffle_rows_cols(m)
-print(m.shape, m.dtype)
-rr, cc = m.shape
-
-m2 = m[rr // 2:]
-m = m[:rr // 2]
-rr, cc = m.shape
-
-
-def plot_subsample_projections():
-    for i, a in enumerate([1000, 100, 30, 10, 3, 1]):
+def plot_subsample_projections(steps):
+    plt.figure(dpi=150, figsize=(15, 10))
+    for i, a in enumerate(steps):
         plt.subplot(231 + i)
         print('PCA')
         randr, randc = random_rows_cols(m, rr // a, cc // a)
@@ -164,14 +180,13 @@ def plot_subsample_projections():
     plt.subplot(232)
     plt.title('Population Structure PCA for\nDifferent Data Subsamples')
     plt.tight_layout()
-    plt.show()
-
-
-plot_subsample_projections()
+    plt.savefig(join(outdir, 'popstr_pca.png'))
+    plt.close()
 
 
 def plot_distances_mds(rats):
-    max_iter = 3
+    plt.figure(dpi=150)
+    max_iter = 2
     dists = []
     rrows = subset(rr, rr // 10)
     groups = []
@@ -196,7 +211,34 @@ def plot_distances_mds(rats):
     plt.legend()
     plt.title('PCoA of Distance Vectors for\nDifferent Subsample Sizes')
     plt.tight_layout()
-    plt.show()
+    plt.savefig(join(outdir, 'popstr_mds.png'))
+    plt.close()
 
 
-plot_distances_mds([1000, 100, 10, 3, 1])
+try_setproctitle()
+
+parser = ArgumentParser()
+parser.add_argument('-o', type=str, help='Output directory', default='.')
+parser.add_argument('-i', type=str, help='Input HAS file', required=True)
+args = parser.parse_args()
+
+infile = args.i
+outdir = args.o
+
+os.makedirs(outdir)
+
+df = read_df()
+m = df.values
+print('Shuffling')
+m = shuffle_rows_cols(m)
+print(m.shape, m.dtype)
+rr, cc = m.shape
+
+# Divide samples to 2, one half for calculating PCA and one for testing.
+m2 = m[rr // 2:]
+m = m[:rr // 2]
+rr, cc = m.shape
+
+plot_subsample_projections([300, 100, 30, 10, 3, 1])
+plot_distances_mds([300, 100, 30, 10, 3, 1])
+create_final_pca(10)
