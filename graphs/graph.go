@@ -59,12 +59,12 @@ func (g *Graph) ConnectedComponents() [][]int {
 		if _, ok := m[i]; ok {
 			continue
 		}
+		m[i] = i
 		queue := []int{i}
 		for len(queue) > 0 {
-			cur := queue[0]
-			m[cur] = i
-			for _, j := range edges[cur] {
+			for _, j := range edges[queue[0]] {
 				if _, ok := m[j]; !ok {
+					m[j] = i
 					queue = append(queue, j)
 				}
 			}
