@@ -34,7 +34,7 @@ func main() {
 	kept := 0
 	var last kmr.FullKmer
 	pt := progress.NewTimerFunc(func(i int) string {
-		return fmt.Sprintf("Read %d, wrote %d (%d%%)\n", i, kept, kept*100/i)
+		return fmt.Sprintf("Read %d, wrote %d (%d%%)", i, kept, kept*100/i)
 	})
 	for err = cnt.Decode(fin); err == nil; err = cnt.Decode(fin) {
 		pt.Inc()
