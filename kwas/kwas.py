@@ -1,12 +1,37 @@
 """Kmer-wide association study (pronounced "kvass")."""
 import argparse
+from datetime import datetime
 from typing import Any, Iterable, Tuple
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from hasloader.hasloader import HasLoader
 from setproctitle import setproctitle
+
+from hasloader.hasloader import HasLoader
+
+
+def timers():
+    c = {a * 10**b for a in [1, 2, 5] for b in range(10)}
+    i = 0
+    t = datetime.now()
+
+    def inc():
+        nonlocal c, i, t
+        i += 1
+        if i in c:
+            d = datetime.now() - t
+            print(f'\r{d} ({d/i}) {i}', end='')
+
+    def done():
+        nonlocal t, i
+        d = datetime.now() - t
+        if i == 0:
+            print(f'\r{d}')
+        else:
+            print(f'\r{d} ({d/i}) {i}')
+
+    return inc, done
 
 
 def regression(x, y, k):
@@ -47,6 +72,8 @@ def xy_iter_gen(exe_fname, has_fname,
     n = -1
     has = np.array([0] * len(covariates_df))
 
+    inc, done = timers()
+
     for kmer in ld:
         n += 1
         has[:] = 0
@@ -60,6 +87,8 @@ def xy_iter_gen(exe_fname, has_fname,
             covariates_df[['bmi']][good_rows],
             kmer['kmer'],
         )
+        inc()
+    done()
 
 
 def run(exe_fname: str, has_fname: str, out_fname: str, cov_fname: str):
