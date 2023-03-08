@@ -162,6 +162,8 @@ func main() {
 		fmt.Println("Saving")
 		jio.Save(*joutput, toJSON)
 	}
+
+	fmt.Println("Done")
 }
 
 // Loads kmers from a HAS file.
