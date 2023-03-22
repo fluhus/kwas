@@ -14,11 +14,11 @@ func TestMerger(t *testing.T) {
 		{counter{1, 2}, counter{3, 5}},
 		{counter{3, 2}, counter{4, 1}, counter{6, 10}},
 	}
-	m := newIterMerger()
+	m := newCounterMerger()
 	for _, s := range streams {
-		iter := &sliceIter{s, 0}
+		iter := counterIter(s)
 		if err := m.Add(iter); err != nil {
-			t.Fatalf("Add(%v) failed: %v", iter, err)
+			t.Fatalf("Add(%v) failed: %v", s, err)
 		}
 	}
 	want := []counter{
@@ -36,17 +36,17 @@ func TestMerger(t *testing.T) {
 		got = append(got, c)
 	}
 	if !slices.EqualFunc(got, want, func(a, b counter) bool {
-		return a.c == b.c && a.t == b.t
+		return a.cnt == b.cnt && a.val == b.val
 	}) {
 		t.Fatalf("Next()=%v, want %v", got, want)
 	}
 }
 
 func TestMerger_empty(t *testing.T) {
-	m := newIterMerger()
-	iter := &sliceIter{nil, 0}
+	m := newCounterMerger()
+	iter := counterIter(nil)
 	if err := m.Add(iter); err != nil {
-		t.Fatalf("Add(%v) failed: %v", iter, err)
+		t.Fatalf("Add(%v) failed: %v", nil, err)
 	}
 	c, err := m.Next()
 	if err != io.EOF {
@@ -55,12 +55,11 @@ func TestMerger_empty(t *testing.T) {
 }
 
 func TestMerger_badOrder(t *testing.T) {
-	m := newIterMerger()
-	iter := &sliceIter{[]counter{
-		{2, 3}, {1, 2},
-	}, 0}
+	m := newCounterMerger()
+	input := []counter{{2, 3}, {1, 2}}
+	iter := counterIter(input)
 	if err := m.Add(iter); err != nil {
-		t.Fatalf("Add(%v) failed: %v", iter, err)
+		t.Fatalf("Add(%v) failed: %v", input, err)
 	}
 	c, err := m.Next()
 	if err == nil || err == io.EOF {
@@ -69,22 +68,20 @@ func TestMerger_badOrder(t *testing.T) {
 }
 
 func TestMerger_addError(t *testing.T) {
-	m := newIterMerger()
-	iter := &sliceIter{[]counter{
-		{2, 123}, {3, 2},
-	}, 0}
+	m := newCounterMerger()
+	input := []counter{{2, 123}, {3, 2}}
+	iter := counterIter(input)
 	if err := m.Add(iter); err == nil {
-		t.Fatalf("Add(%v) succeeded, want error", iter)
+		t.Fatalf("Add(%v) succeeded, want error", input)
 	}
 }
 
 func TestMerger_nextError(t *testing.T) {
-	m := newIterMerger()
-	iter := &sliceIter{[]counter{
-		{2, 2}, {3, 123},
-	}, 0}
+	m := newCounterMerger()
+	input := []counter{{2, 2}, {3, 123}}
+	iter := counterIter(input)
 	if err := m.Add(iter); err != nil {
-		t.Fatalf("Add(%v) failed: %v", iter, err)
+		t.Fatalf("Add(%v) failed: %v", input, err)
 	}
 	c, err := m.Next()
 	if err == nil || err == io.EOF {
@@ -92,38 +89,69 @@ func TestMerger_nextError(t *testing.T) {
 	}
 }
 
-func newIterMerger() *Merger[*sliceIter, counter] {
-	return NewMerger(
-		func(si *sliceIter) (counter, error) {
-			return si.next()
-		}, func(c1, c2 counter) counter {
-			if c1.t != c2.t {
-				panic(fmt.Sprintf("mismatching keys: %d, %d", c1.t, c2.t))
+func TestMerger_mergeMergers(t *testing.T) {
+	inputs := [][]counter{
+		{counter{1, 2}, counter{3, 4}},
+		{counter{2, 3}, counter{3, 10}, counter{5, 1}},
+		{counter{2, 4}, counter{3, 7}, counter{5, 4}},
+		{counter{1, 4}, counter{3, 2}, counter{5, 2}},
+	}
+	want := []counter{{1, 6}, {2, 7}, {3, 23}, {5, 7}}
+	m1 := newCounterMerger()
+	m2 := newCounterMerger()
+	m3 := newCounterMerger()
+	m1.Add(counterIter(inputs[0]))
+	m1.Add(counterIter(inputs[1]))
+	m2.Add(counterIter(inputs[2]))
+	m2.Add(counterIter(inputs[3]))
+	m3.Add(m1.Next)
+	m3.Add(m2.Next)
+
+	var got []counter
+	var err error
+	var c counter
+	for c, err = m3.Next(); err == nil; c, err = m3.Next() {
+		got = append(got, c)
+	}
+	if err != io.EOF {
+		t.Fatalf("Next() failed: %v", err)
+	}
+	if !slices.EqualFunc(got, want, func(a, b counter) bool {
+		return a.cnt == b.cnt && a.val == b.val
+	}) {
+		t.Fatalf("Next()=%v, want %v", got, want)
+	}
+}
+
+func newCounterMerger() *Merger[counter] {
+	return NewMerger(func(c1, c2 counter) int {
+		return c1.val - c2.val
+	},
+		func(c1, c2 counter) counter {
+			if c1.val != c2.val {
+				panic(fmt.Sprintf("mismatching keys: %d, %d", c1.val, c2.val))
 			}
-			return counter{c1.t, c1.c + c2.c}
-		}, func(c1, c2 counter) int {
-			return c1.t - c2.t
+			return counter{c1.val, c1.cnt + c2.cnt}
 		},
 	)
 }
 
 type counter struct {
-	t int
-	c int
+	val int
+	cnt int
 }
 
-type sliceIter struct {
-	s []counter
-	i int
-}
-
-func (s *sliceIter) next() (counter, error) {
-	if s.i >= len(s.s) {
-		return counter{}, io.EOF
+func counterIter(s []counter) func() (counter, error) {
+	i := 0
+	return func() (counter, error) {
+		if i >= len(s) {
+			return counter{}, io.EOF
+		}
+		c := s[i]
+		i++
+		if c.cnt == 123 {
+			return counter{}, fmt.Errorf("test error")
+		}
+		return c, nil
 	}
-	if s.s[s.i].c == 123 {
-		return counter{}, fmt.Errorf("test error")
-	}
-	s.i++
-	return s.s[s.i-1], nil
 }
