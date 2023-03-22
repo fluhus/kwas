@@ -2,51 +2,51 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/kmr"
-	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
 )
 
 var (
-	in  = flag.String("i", "", "Path to input file")
-	out = flag.String("o", "", "Path to output file")
-	min = flag.Uint64("n", 0, "Minimal count to leave a kmer in")
-	del = flag.Bool("d", false, "Delete input file")
+	inFile  = flag.String("i", "", "Path to input file")
+	outFile = flag.String("o", "", "Path to output file")
+	min     = flag.Uint64("n", 0, "Minimal count to leave a kmer in")
+	del     = flag.Bool("d", false, "Delete input file")
 )
 
 func main() {
 	fmt.Println("Opening files")
 	flag.Parse()
-	fin, err := aio.Open(*in)
+	fin, err := aio.Open(*inFile)
 	util.Die(err)
-	fout, err := aio.Create(*out)
+	fout, err := aio.Create(*outFile)
 	util.Die(err)
+	kw := kmr.NewWriter(fout)
 
 	fmt.Println("Filtering")
 	cnt := &kmr.HasCount{}
 	kept := 0
 	var last kmr.FullKmer
-	pt := progress.NewTimerFunc(func(i int) string {
-		return fmt.Sprintf("Read %d, wrote %d (%d%%)", i, kept, kept*100/i)
+	pt := ptimer.NewFunc(func(i int) string {
+		return fmt.Sprintf("read %d, wrote %d (%d%%)", i, kept, kept*100/i)
 	})
 	for err = cnt.Decode(fin); err == nil; err = cnt.Decode(fin) {
 		pt.Inc()
-		if pt.N != 1 && bytes.Compare(last[:], cnt.Kmer[:]) != -1 {
-			util.Die(fmt.Errorf("kmers not in order: %v %v", last, cnt.Kmer[:]))
+		if cnt.Kmer.Less(last) {
+			util.Die(fmt.Errorf("kmers not in order: %v %v", last, cnt.Kmer))
 		}
 		last = cnt.Kmer
 		if cnt.Count < *min {
 			continue
 		}
 		kept++
-		err = cnt.Encode(fout)
+		err = kw.Write(last)
 		if err != nil {
 			break
 		}
@@ -60,7 +60,7 @@ func main() {
 
 	if *del {
 		fmt.Println("Deleting input file")
-		util.Die(os.Remove(*in))
+		util.Die(os.Remove(*inFile))
 	}
 
 	fmt.Println("Done")
