@@ -2,14 +2,12 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"time"
+	"io"
 
-	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
-	"github.com/fluhus/kwas/kmc"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/slices"
@@ -18,11 +16,13 @@ import (
 var (
 	p   = flag.Int("p", 1, "Sample part number")
 	np  = flag.Int("np", 1, "Number of sample parts")
-	k   = flag.Int("k", 1, "Kmer part number")
-	nk  = flag.Int("nk", 1, "Number of kmer parts")
 	out = flag.String("o", "", "Output file")
 	ff  = flag.String("f", "", "File with input files "+
 		"(if omitted, inupt files are expected as arguments)")
+
+	// Ignored for now.
+	k  = flag.Int("k", 1, "Kmer part number")
+	nk = flag.Int("nk", 1, "Number of kmer parts")
 )
 
 func main() {
@@ -42,48 +42,67 @@ func main() {
 	files, _ = util.ChooseStrings(files, *p-1, *np)
 	fmt.Println("Found", len(files), "files to count")
 
-	m := map[kmr.FullKmer]int{}
-	var buf []byte
-
-	for i, file := range files {
-		fmt.Printf("Opening %v/%v: %s\n", i+1, len(files), file)
-		t := time.Now()
-		util.Die(kmc.KMC2(func(kmer []byte, count int) {
-			if util.Hash64(kmer)%uint64(*nk) != uint64(*k-1) {
-				return
-			}
-			buf = sequtil.DNATo2Bit(buf[:0], kmer)
-			m[*(*kmr.FullKmer)(buf)]++
-		}, file, kmc.OptionK(kmr.K)))
-		fmt.Println("Took", time.Since(t), "len", len(m))
+	fmt.Println("Opening files")
+	var streams []*util.Unreader[kmr.FullKmer]
+	for _, file := range files {
+		s, err := newUnreader(file)
+		util.Die(err)
+		streams = append(streams, s)
 	}
 
-	fmt.Println("Organizing counts")
-	t := time.Now()
-	tuples := make([]*kmr.HasCount, 0, len(m))
-	for kmer, count := range m {
-		tuples = append(tuples, &kmr.HasCount{
-			Kmer: kmer, Count: uint64(count)})
-	}
-	fmt.Println("Took", time.Since(t))
-	fmt.Println("Sorting")
-	t = time.Now()
-	slices.SortFunc(tuples, func(a, b *kmr.HasCount) bool {
-		return bytes.Compare(a.Kmer[:], b.Kmer[:]) == -1
-	})
-	fmt.Println("Took", time.Since(t))
-	fmt.Println("Writing")
-	t = time.Now()
 	fout, err := aio.Create(*out)
 	util.Die(err)
-	for _, tup := range tuples {
-		err = tup.Encode(fout)
-		if err != nil {
-			break
+
+	fmt.Println("Creating checkpoints")
+	checkpoints := kmr.Checkpoints(1000)
+
+	fmt.Println("Counting")
+	lens := 0
+	pt := ptimer.NewMessasge("{} kmers")
+
+	for _, cp := range checkpoints {
+		counts := map[kmr.FullKmer]int{}
+		if lens > 0 {
+			counts = make(map[kmr.FullKmer]int, lens*3/pt.N/2)
+		}
+		for i, s := range streams {
+			if s == nil {
+				continue
+			}
+			err := s.ReadUntil(cp.Less, func(kmer kmr.FullKmer) error {
+				counts[kmer]++
+				return nil
+			})
+			if err == io.EOF {
+				streams[i] = nil
+				continue
+			}
+			util.Die(err)
+		}
+		lens += len(counts)
+		tuples := make([]kmr.HasCount, 0, len(counts))
+		for k, v := range counts {
+			tuples = append(tuples, kmr.HasCount{Kmer: k, Count: uint64(v)})
+		}
+		slices.SortFunc(tuples, func(a, b kmr.HasCount) bool {
+			return a.Kmer.Less(b.Kmer)
+		})
+		for _, t := range tuples {
+			t.Encode(fout)
+			pt.Inc()
 		}
 	}
 	fout.Close()
-	util.Die(err)
-	fmt.Println("Took", time.Since(t))
-	fmt.Println("Done")
+	pt.Done()
+	fmt.Println(lens, "kmers")
+}
+
+func newUnreader(file string) (*util.Unreader[kmr.FullKmer], error) {
+	// TODO(amit): Close input file.
+	f, err := aio.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	r := kmr.NewReader(f)
+	return util.NewUnreader(r.Read), nil
 }
