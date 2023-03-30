@@ -30,7 +30,7 @@ func main() {
 	kw := kmr.NewWriter(fout)
 
 	fmt.Println("Filtering")
-	cnt := &kmr.HasCount{}
+	cnt := &kmr.CountTuple{}
 	kept := 0
 	var last kmr.FullKmer
 	pt := ptimer.NewFunc(func(i int) string {

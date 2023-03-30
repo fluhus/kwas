@@ -80,11 +80,11 @@ func main() {
 			util.Die(err)
 		}
 		lens += len(counts)
-		tuples := make([]kmr.HasCount, 0, len(counts))
+		tuples := make([]kmr.CountTuple, 0, len(counts))
 		for k, v := range counts {
-			tuples = append(tuples, kmr.HasCount{Kmer: k, Count: uint64(v)})
+			tuples = append(tuples, kmr.CountTuple{Kmer: k, Count: uint64(v)})
 		}
-		slices.SortFunc(tuples, func(a, b kmr.HasCount) bool {
+		slices.SortFunc(tuples, func(a, b kmr.CountTuple) bool {
 			return a.Kmer.Less(b.Kmer)
 		})
 		for _, t := range tuples {
