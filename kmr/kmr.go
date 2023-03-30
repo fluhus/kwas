@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	K       = 33
+	K       = 20
 	K2BFull = (K + 3) / 4
 )
 
@@ -40,4 +40,28 @@ func ReadFullKmersLines(file string) (FullKmerSet, error) {
 			len(m), len(kmers))
 	}
 	return m, nil
+}
+
+// Less compares the receiver to the argument lexicographically.
+func (a FullKmer) Less(b FullKmer) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// Compare returns -1 if a is lexicographically less than b, 1 if b is less than
+// a, or 0 if they are equal.
+func (a FullKmer) Compare(b FullKmer) int {
+	for i := range a {
+		if a[i] < b[i] {
+			return -1
+		}
+		if a[i] > b[i] {
+			return 1
+		}
+	}
+	return 0
 }

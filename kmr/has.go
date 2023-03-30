@@ -3,7 +3,6 @@ package kmr
 import (
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/fluhus/gostuff/bnry"
 	"golang.org/x/exp/slices"
@@ -52,6 +51,7 @@ func (p *HasCount) Decode(r io.ByteReader) error {
 type HasTuple struct {
 	Kmer    FullKmer
 	Samples []int // Indexes of samples that have this kmer.
+	Sort    bool
 }
 
 func (t *HasTuple) GetKmer() []byte {
@@ -62,6 +62,7 @@ func (t *HasTuple) Copy() Tuple {
 	cp := &HasTuple{
 		Kmer:    t.Kmer,
 		Samples: make([]int, len(t.Samples)),
+		Sort:    t.Sort,
 	}
 	copy(cp.Samples, t.Samples)
 	return cp
@@ -73,10 +74,13 @@ func (t *HasTuple) Add(other Tuple) {
 }
 
 func (t *HasTuple) Encode(w io.Writer) error {
-	if !sort.IntsAreSorted(t.Samples) {
-		sort.Ints(t.Samples)
+	if t.Sort {
+		slices.Sort(t.Samples)
 	}
-	if err := bnry.Write(w, t.Kmer[:], toDiffs(t.Samples)); err != nil {
+	toDiffs(t.Samples)
+	err := bnry.Write(w, t.Kmer[:], t.Samples)
+	fromDiffs(t.Samples)
+	if err != nil {
 		return nil
 	}
 	return nil
@@ -84,41 +88,34 @@ func (t *HasTuple) Encode(w io.Writer) error {
 
 func (t *HasTuple) Decode(r io.ByteReader) error {
 	var b []byte
-	var diffs []uint64
-	if err := bnry.Read(r, &b, &diffs); err != nil {
+	if err := bnry.Read(r, &b, &t.Samples); err != nil {
 		return err
 	}
 	if len(b) != len(t.Kmer) {
 		return fmt.Errorf("bad kmer length: %v, want %v", len(b), len(t.Kmer))
 	}
 	copy(t.Kmer[:], b)
-	t.Samples = fromDiffs(diffs)
-	if !slices.IsSorted(t.Samples) {
-		return fmt.Errorf("samples are not sorted")
-	}
+	fromDiffs(t.Samples)
 	return nil
 }
 
-func toDiffs(a []int) []uint64 {
+func toDiffs(a []int) {
 	if len(a) == 0 {
-		return nil
+		return
 	}
-	diffs := make([]uint64, len(a))
-	diffs[0] = uint64(a[0])
+	last := a[0]
 	for i := range a[1:] {
-		diffs[i+1] = uint64(a[i+1] - a[i])
+		lastt := a[i+1]
+		a[i+1] = a[i+1] - last
+		last = lastt
 	}
-	return diffs
 }
 
-func fromDiffs(diffs []uint64) []int {
-	if len(diffs) == 0 {
-		return nil
+func fromDiffs(a []int) {
+	if len(a) == 0 {
+		return
 	}
-	a := make([]int, len(diffs))
-	a[0] = int(diffs[0])
-	for i := range diffs[1:] {
-		a[i+1] = a[i] + int(diffs[i+1])
+	for i := range a[1:] {
+		a[i+1] = a[i] + a[i+1]
 	}
-	return a
 }

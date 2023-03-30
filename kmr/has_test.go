@@ -64,7 +64,7 @@ func TestHasTupleEncode(t *testing.T) {
 	}
 	want := &HasTuple{
 		Kmer:    FullKmer{},
-		Samples: []int{0, 1, 5, 7, 8},
+		Samples: []int{5, 8, 0, 7, 1},
 	}
 
 	buf := &bytes.Buffer{}
@@ -81,13 +81,31 @@ func TestHasTupleEncode(t *testing.T) {
 }
 
 func TestDiffs(t *testing.T) {
-	a := []int{5, 10, 13, 27, 100}
-	b := []uint64{5, 5, 3, 14, 73}
+	input := []int{5, 10, 13, 27, 100}
+	want := []int{5, 5, 3, 14, 73}
+	slice := slices.Clone(input)
 
-	if got := toDiffs(slices.Clone(a)); !slices.Equal(b, got) {
-		t.Fatalf("toDiffs(%v)=%v, want %v", a, got, b)
+	toDiffs(slice)
+	if !slices.Equal(slice, want) {
+		t.Fatalf("toDiffs(%v)=%v, want %v", input, slice, want)
 	}
-	if got := fromDiffs(b); !slices.Equal(got, a) {
-		t.Fatalf("fromDiffs(%v)=%v, want %v", b, got, a)
+	fromDiffs(slice)
+	if !slices.Equal(slice, input) {
+		t.Fatalf("fromDiffs(%v)=%v, want %v", input, slice, input)
+	}
+}
+
+func TestDiffs_negative(t *testing.T) {
+	input := []int{13, 5, 27, 100, 10}
+	want := []int{13, -8, 22, 73, -90}
+	slice := slices.Clone(input)
+
+	toDiffs(slice)
+	if !slices.Equal(slice, want) {
+		t.Fatalf("toDiffs(%v)=%v, want %v", input, slice, want)
+	}
+	fromDiffs(slice)
+	if !slices.Equal(slice, input) {
+		t.Fatalf("fromDiffs(%v)=%v, want %v", input, slice, input)
 	}
 }

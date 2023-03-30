@@ -62,7 +62,7 @@ func TestMergerHas(t *testing.T) {
 
 	m := &Merger{}
 	for i := range bufs {
-		if err := m.Add(bufs[i], &HasTuple{}); err != nil {
+		if err := m.Add(bufs[i], &HasTuple{Sort: true}); err != nil {
 			t.Fatalf("Add(...) failed: %v", err)
 		}
 	}

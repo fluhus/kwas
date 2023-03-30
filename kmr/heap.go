@@ -24,7 +24,7 @@ type Tuple interface {
 func TupleFromString(s string) Tuple {
 	switch s {
 	case "has":
-		return &HasTuple{}
+		return &HasTuple{Sort: true}
 	case "hac":
 		return &HasCount{}
 	case "prf":
