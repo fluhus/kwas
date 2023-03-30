@@ -16,19 +16,21 @@ import (
 	"github.com/fluhus/gostuff/gnum"
 	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/gostuff/ppln"
+	"github.com/fluhus/gostuff/ptimer"
+	"github.com/fluhus/gostuff/snm"
 	"github.com/fluhus/kwas/graphs"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
-	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/slices"
 )
 
 var (
-	input   = flag.String("i", "", "Input file glob pattern")
-	output  = flag.String("o", "", "Output file")
-	joutput = flag.String("j", "", "Optional output JSON file for cluster")
-	nt      = flag.Int("t", 1, "Number of threads")
+	input    = flag.String("i", "", "Input file glob pattern")
+	output   = flag.String("o", "", "Output file")
+	joutput  = flag.String("j", "", "Optional output JSON file for cluster")
+	nt       = flag.Int("t", 1, "Number of threads")
+	nSamples = flag.Int("n", 0, "Total number of samples")
 )
 
 func main() {
@@ -57,7 +59,7 @@ func main() {
 	})
 
 	graph := graphs.New(len(kmers))
-	pt := progress.NewTimerMessasge(fmt.Sprint("{} out of ", len(expanded)))
+	pt := ptimer.NewMessasge(fmt.Sprint("{} out of ", len(expanded)))
 
 	ppln.NonSerial(*nt,
 		func(push func(istring), _ func() bool) error {
@@ -68,7 +70,7 @@ func main() {
 			return nil
 		},
 		func(e istring, push func([2]int), g int) error {
-			const thr = 0.1
+			const thr = 0.05
 			const n = kmr.K / 2
 			ei := e.i
 			for p := 1; p <= n; p++ {
@@ -82,7 +84,8 @@ func main() {
 					if e.i == es.i {
 						continue
 					}
-					if util.JaccardDist(kmers[ei].Samples, kmers[si].Samples) < thr {
+					if util.JaccardDualDist(kmers[ei].Samples, kmers[si].Samples,
+						*nSamples) < thr {
 						push([2]int{ei, si})
 					}
 				}
@@ -113,11 +116,11 @@ func main() {
 	} else {
 		fmt.Println("Component sizes:", lens)
 	}
-	fmt.Println("Component size quantiles:", ntiles(20, lens))
+	fmt.Println("Component size quantiles:", util.NTiles(20, lens))
 
 	fmt.Println("Finding centers")
 	centers := make([]*kmr.HasTuple, 0, len(comps))
-	pt = progress.NewTimer()
+	pt = ptimer.New()
 	ppln.Serial(*nt,
 		func(push func([]int), _ func() bool) error {
 			for _, comp := range comps {
@@ -127,7 +130,7 @@ func main() {
 			return nil
 		},
 		func(a []int, i, g int) (*kmr.HasTuple, error) {
-			compKmers := at(kmers, a)
+			compKmers := snm.At(kmers, a)
 			return compKmers[util.ArgMin(sqDistances(compKmers))], nil
 		},
 		func(a *kmr.HasTuple) error {
@@ -152,7 +155,7 @@ func main() {
 		var toJSON [][]string
 		for _, comp := range comps {
 			var c []string
-			for _, kmer := range at(kmers, comp) {
+			for _, kmer := range snm.At(kmers, comp) {
 				e := string(sequtil.DNAFrom2Bit(nil, kmer.Kmer[:])[:kmr.K])
 				c = append(c, e)
 			}
@@ -213,21 +216,12 @@ func loadKmersGlob(file string) ([]*kmr.HasTuple, error) {
 	return result, nil
 }
 
-// Returns the elements at the given indices.
-func at[S ~[]E, E any, X ~[]D, D constraints.Integer](s S, idx X) S {
-	result := make(S, 0, len(idx))
-	for _, i := range idx {
-		result = append(result, s[i])
-	}
-	return result
-}
-
 // Returns the sum of square distances from each tuple to the rest.
 func sqDistances(kmers []*kmr.HasTuple) []float64 {
 	result := make([]float64, len(kmers))
 	for i, ki := range kmers {
 		for j, kj := range kmers[i+1:] {
-			d := util.JaccardDist(ki.Samples, kj.Samples)
+			d := util.JaccardDualDist(ki.Samples, kj.Samples, *nSamples)
 			d *= d
 			result[i] += d
 			result[j+i+1] += d
@@ -236,16 +230,6 @@ func sqDistances(kmers []*kmr.HasTuple) []float64 {
 	gnum.Mul1(result, 1.0/float64(len(kmers)-1))
 	for i := range result {
 		result[i] = math.Sqrt(result[i])
-	}
-	return result
-}
-
-// Returns the n-tiles of the given sorted slice.
-func ntiles[S ~[]E, E constraints.Ordered](n int, s S) S {
-	result := make(S, n+1)
-	for i := 0; i <= n; i++ {
-		j := int(math.Round(float64(i) / float64(n) * float64(len(s)-1)))
-		result[i] = s[j]
 	}
 	return result
 }
