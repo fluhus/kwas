@@ -136,7 +136,7 @@ func TestProfileSampleCount(t *testing.T) {
 
 func TestProfileTupleEncode(t *testing.T) {
 	input := &ProfileTuple{
-		Kmer: FullKmer{1: 2, 3: 4, 5: 6},
+		Kmer: FullKmer{1: 2, 3: 4},
 		P: Profile{
 			10: [4]int64{20, 40, 50, 33},
 			12: [4]int64{11111, 12, 0, 0},
