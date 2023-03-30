@@ -98,7 +98,7 @@ func main() {
 	fmt.Println("Sorting")
 	pt = progress.NewTimer()
 	keys := maps.Keys(ps)
-	keys2bit := map[string]kmr.FullKmer{}
+	keys2bit := map[string]kmr.Kmer{}
 	for _, k := range keys {
 		keys2bit[k] = stringToKmer(k)
 	}
@@ -126,8 +126,8 @@ func main() {
 	fmt.Println("Done")
 }
 
-func stringToKmer(s string) kmr.FullKmer {
+func stringToKmer(s string) kmr.Kmer {
 	kmer2bit := sequtil.DNATo2Bit(nil, []byte(s))
-	kmer := *(*kmr.FullKmer)(kmer2bit)
+	kmer := kmr.Kmer(kmer2bit)
 	return kmer
 }

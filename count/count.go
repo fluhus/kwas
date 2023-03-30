@@ -43,7 +43,7 @@ func main() {
 	fmt.Println("Found", len(files), "files to count")
 
 	fmt.Println("Opening files")
-	var streams []*util.Unreader[kmr.FullKmer]
+	var streams []*util.Unreader[kmr.Kmer]
 	for _, file := range files {
 		s, err := newUnreader(file)
 		util.Die(err)
@@ -61,15 +61,15 @@ func main() {
 	pt := ptimer.NewMessasge("{} kmers")
 
 	for _, cp := range checkpoints {
-		counts := map[kmr.FullKmer]int{}
+		counts := map[kmr.Kmer]int{}
 		if lens > 0 {
-			counts = make(map[kmr.FullKmer]int, lens*3/pt.N/2)
+			counts = make(map[kmr.Kmer]int, lens*3/pt.N/2)
 		}
 		for i, s := range streams {
 			if s == nil {
 				continue
 			}
-			err := s.ReadUntil(cp.Less, func(kmer kmr.FullKmer) error {
+			err := s.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
 				counts[kmer]++
 				return nil
 			})
@@ -97,7 +97,7 @@ func main() {
 	fmt.Println(lens, "kmers")
 }
 
-func newUnreader(file string) (*util.Unreader[kmr.FullKmer], error) {
+func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {
 	// TODO(amit): Close input file.
 	f, err := aio.Open(file)
 	if err != nil {

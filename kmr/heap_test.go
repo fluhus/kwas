@@ -14,50 +14,50 @@ func TestMergerHas(t *testing.T) {
 	}
 
 	(&HasTuple{
-		Kmer:    FullKmer{1},
+		Kmer:    Kmer{1},
 		Samples: []int{1, 3},
 	}).Encode(bufs[0])
 	(&HasTuple{
-		Kmer:    FullKmer{2},
+		Kmer:    Kmer{2},
 		Samples: []int{5, 8},
 	}).Encode(bufs[0])
 	(&HasTuple{
-		Kmer:    FullKmer{6},
+		Kmer:    Kmer{6},
 		Samples: []int{10, 14},
 	}).Encode(bufs[0])
 
 	(&HasTuple{
-		Kmer:    FullKmer{0},
+		Kmer:    Kmer{0},
 		Samples: []int{0, 4},
 	}).Encode(bufs[1])
 	(&HasTuple{
-		Kmer:    FullKmer{1},
+		Kmer:    Kmer{1},
 		Samples: []int{2, 5},
 	}).Encode(bufs[1])
 	(&HasTuple{
-		Kmer:    FullKmer{2},
+		Kmer:    Kmer{2},
 		Samples: []int{2, 9},
 	}).Encode(bufs[1])
 	(&HasTuple{
-		Kmer:    FullKmer{4},
+		Kmer:    Kmer{4},
 		Samples: []int{0, 4},
 	}).Encode(bufs[1])
 
 	(&HasTuple{
-		Kmer:    FullKmer{2},
+		Kmer:    Kmer{2},
 		Samples: []int{1, 4},
 	}).Encode(bufs[2])
 	(&HasTuple{
-		Kmer:    FullKmer{4},
+		Kmer:    Kmer{4},
 		Samples: []int{1, 3},
 	}).Encode(bufs[2])
 
 	want := []*HasTuple{
-		{Kmer: FullKmer{0}, Samples: []int{0, 4}},
-		{Kmer: FullKmer{1}, Samples: []int{1, 2, 3, 5}},
-		{Kmer: FullKmer{2}, Samples: []int{1, 2, 4, 5, 8, 9}},
-		{Kmer: FullKmer{4}, Samples: []int{0, 1, 3, 4}},
-		{Kmer: FullKmer{6}, Samples: []int{10, 14}},
+		{Kmer: Kmer{0}, Samples: []int{0, 4}},
+		{Kmer: Kmer{1}, Samples: []int{1, 2, 3, 5}},
+		{Kmer: Kmer{2}, Samples: []int{1, 2, 4, 5, 8, 9}},
+		{Kmer: Kmer{4}, Samples: []int{0, 1, 3, 4}},
+		{Kmer: Kmer{6}, Samples: []int{10, 14}},
 	}
 
 	m := &Merger{}

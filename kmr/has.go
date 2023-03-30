@@ -10,7 +10,7 @@ import (
 
 // CountTuple counts how many samples have a kmer.
 type CountTuple struct {
-	Kmer  FullKmer
+	Kmer  Kmer
 	Count uint64
 }
 
@@ -49,7 +49,7 @@ func (p *CountTuple) Decode(r io.ByteReader) error {
 
 // HasTuple represents a kmer with the samples that have it.
 type HasTuple struct {
-	Kmer    FullKmer
+	Kmer    Kmer
 	Samples []int // Indexes of samples that have this kmer.
 	Sort    bool
 }

@@ -10,10 +10,10 @@ import (
 
 type Writer struct {
 	w   *bnry.Writer
-	cur FullKmer
+	cur Kmer
 }
 
-func (w *Writer) Write(kmer FullKmer) error {
+func (w *Writer) Write(kmer Kmer) error {
 	i := 0
 	for i = range kmer {
 		if kmer[i] != w.cur[i] {
@@ -33,21 +33,21 @@ func NewWriter(w io.Writer) *Writer {
 
 type Reader struct {
 	r   io.ByteReader
-	cur FullKmer
+	cur Kmer
 }
 
-func (r *Reader) Read() (FullKmer, error) {
+func (r *Reader) Read() (Kmer, error) {
 	n, err := binary.ReadUvarint(r.r)
 	if err != nil {
-		return FullKmer{}, err
+		return Kmer{}, err
 	}
 	if n > uint64(len(r.cur)) {
-		return FullKmer{}, fmt.Errorf("bad kmer piece length: %d", n)
+		return Kmer{}, fmt.Errorf("bad kmer piece length: %d", n)
 	}
 	for i := range r.cur[:n] {
 		r.cur[len(r.cur)-int(n)+i], err = r.r.ReadByte()
 		if err != nil {
-			return FullKmer{}, err
+			return Kmer{}, err
 		}
 	}
 	return r.cur, nil

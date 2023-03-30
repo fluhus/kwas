@@ -9,7 +9,7 @@ import (
 )
 
 func TestWriteRead(t *testing.T) {
-	inputs := [][]FullKmer{
+	inputs := [][]Kmer{
 		{},
 		{{5, 4, 3, 2, 1}},
 		{{0, 0, 0, 0, 0}, {0, 0, 0, 0, 1}, {0, 0, 0, 0, 3}, {0, 0, 0, 1, 5}},
@@ -26,7 +26,7 @@ func TestWriteRead(t *testing.T) {
 				t.Fatalf("Write(%v) failed: %v", kmer, err)
 			}
 		}
-		var got []FullKmer
+		var got []Kmer
 		r := NewReader(buf)
 		for {
 			kmer, err := r.Read()

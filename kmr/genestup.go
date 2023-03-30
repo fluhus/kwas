@@ -11,7 +11,7 @@ import (
 )
 
 type GeneSetTuple struct {
-	Kmer  FullKmer
+	Kmer  Kmer
 	Genes sets.Set[string]
 }
 
@@ -33,7 +33,7 @@ func (t *GeneSetTuple) Decode(r io.ByteReader) error {
 		return fmt.Errorf("bad kmer length: %d, want %d",
 			len(b), len(t.Kmer))
 	}
-	t.Kmer = *(*FullKmer)(b)
+	t.Kmer = *(*Kmer)(b)
 	t.Genes = sets.Set[string]{}.Add(s...)
 	return nil
 }

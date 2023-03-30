@@ -32,7 +32,7 @@ func main() {
 	fmt.Println("Filtering")
 	cnt := &kmr.CountTuple{}
 	kept := 0
-	var last kmr.FullKmer
+	var last kmr.Kmer
 	pt := ptimer.NewFunc(func(i int) string {
 		return fmt.Sprintf("read %d, wrote %d (%d%%)", i, kept, kept*100/i)
 	})

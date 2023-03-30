@@ -9,8 +9,8 @@ import (
 )
 
 func TestPrabCountAdd(t *testing.T) {
-	a := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{FullKmer{1, 2, 3, 4}, 321}
+	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
+	b := &CountTuple{Kmer{1, 2, 3, 4}, 321}
 	a.Add(b)
 	want := uint64(444)
 	if a.Count != want {
@@ -20,15 +20,15 @@ func TestPrabCountAdd(t *testing.T) {
 
 func TestCountAdd_bad(t *testing.T) {
 	defer func() { recover() }()
-	a := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{FullKmer{1, 2, 3}, 321}
+	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
+	b := &CountTuple{Kmer{1, 2, 3}, 321}
 	a.Add(b)
 	t.Fatalf("Add(...) succeeded, want fail")
 }
 
 func TestCountCopy(t *testing.T) {
-	a := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
+	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
+	b := &CountTuple{Kmer{1, 2, 3, 4}, 123}
 	c := b.Copy().(*CountTuple)
 	if !reflect.DeepEqual(a, b) {
 		t.Fatalf("Copy() changed receiver %v, want %v", b, a)
@@ -39,8 +39,8 @@ func TestCountCopy(t *testing.T) {
 }
 
 func TestCountEncode(t *testing.T) {
-	a := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{FullKmer{1, 2, 3, 4}, 123}
+	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
+	b := &CountTuple{Kmer{1, 2, 3, 4}, 123}
 	c := &CountTuple{}
 	buf := bytes.NewBuffer(nil)
 	if err := b.Encode(buf); err != nil {
@@ -59,11 +59,11 @@ func TestCountEncode(t *testing.T) {
 
 func TestHasTupleEncode(t *testing.T) {
 	tup := &HasTuple{
-		Kmer:    FullKmer{},
+		Kmer:    Kmer{},
 		Samples: []int{5, 8, 0, 7, 1},
 	}
 	want := &HasTuple{
-		Kmer:    FullKmer{},
+		Kmer:    Kmer{},
 		Samples: []int{5, 8, 0, 7, 1},
 	}
 

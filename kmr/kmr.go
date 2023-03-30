@@ -11,29 +11,29 @@ import (
 )
 
 const (
-	K       = 20
-	K2BFull = (K + 3) / 4
+	K   = 20          // Kmer length.
+	K2B = (K + 3) / 4 // 2-bit kmer length.
 )
 
-// FullKmer is a 2-bit kmer including its SNP.
-type FullKmer [K2BFull]byte
+// Kmer is a 2-bit kmer.
+type Kmer [K2B]byte
 
-// FullKmerSet is a set of unique full kmers.
-type FullKmerSet = sets.Set[FullKmer]
+// KmerSet is a set of unique full kmers.
+type KmerSet = sets.Set[Kmer]
 
-// ReadFullKmersLines reads a set of kmers from a file.
-func ReadFullKmersLines(file string) (FullKmerSet, error) {
+// ReadKmersLines reads a set of kmers from a file.
+func ReadKmersLines(file string) (KmerSet, error) {
 	kmers, err := util.ReadLines(aio.Open(file))
 	if err != nil {
 		return nil, err
 	}
 
-	m := make(FullKmerSet, len(kmers))
+	m := make(KmerSet, len(kmers))
 	var buf, buf2 []byte
 	for _, kmer := range kmers {
 		buf2 = append(buf2[:0], kmer...) // Efficiently convert string to bytes.
 		buf = sequtil.DNATo2Bit(buf[:0], buf2)
-		m.Add(*(*FullKmer)(buf))
+		m.Add(*(*Kmer)(buf))
 	}
 	if len(m) != len(kmers) {
 		return nil, fmt.Errorf("bad map length: %v, want %v",
@@ -43,7 +43,7 @@ func ReadFullKmersLines(file string) (FullKmerSet, error) {
 }
 
 // Less compares the receiver to the argument lexicographically.
-func (a FullKmer) Less(b FullKmer) bool {
+func (a Kmer) Less(b Kmer) bool {
 	for i := range a {
 		if a[i] != b[i] {
 			return a[i] < b[i]
@@ -54,7 +54,7 @@ func (a FullKmer) Less(b FullKmer) bool {
 
 // Compare returns -1 if a is lexicographically less than b, 1 if b is less than
 // a, or 0 if they are equal.
-func (a FullKmer) Compare(b FullKmer) int {
+func (a Kmer) Compare(b Kmer) int {
 	for i := range a {
 		if a[i] < b[i] {
 			return -1

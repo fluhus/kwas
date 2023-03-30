@@ -119,7 +119,7 @@ func (s ProfileSet[T]) Add(other ProfileSet[T]) {
 }
 
 type ProfileTuple struct {
-	Kmer FullKmer
+	Kmer Kmer
 	P    Profile
 	C    ProfileSampleCounts
 }

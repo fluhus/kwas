@@ -28,8 +28,8 @@ func main() {
 
 	fmt.Println("Reading kmers")
 	pt := ptimer.New()
-	var kmers []kmr.FullKmer
-	var buf kmr.FullKmer
+	var kmers []kmr.Kmer
+	var buf kmr.Kmer
 	err := kmc.KMC2(func(kmer []byte, count int) {
 		sequtil.DNATo2Bit(buf[:0], kmer)
 		kmers = append(kmers, buf)
@@ -40,7 +40,7 @@ func main() {
 
 	fmt.Println("Sorting")
 	pt = ptimer.New()
-	slices.SortFunc(kmers, func(a, b kmr.FullKmer) bool {
+	slices.SortFunc(kmers, func(a, b kmr.Kmer) bool {
 		return a.Less(b)
 	})
 	pt.Done()
@@ -55,7 +55,7 @@ func main() {
 	if *selfTest {
 		fmt.Println("Sanity testing (-t)")
 		fmt.Print("  Uniqueness: ")
-		fmt.Println(boolToOK(len(kmers) == len(sets.Set[kmr.FullKmer]{}.Add(kmers...))))
+		fmt.Println(boolToOK(len(kmers) == len(sets.Set[kmr.Kmer]{}.Add(kmers...))))
 
 		fmt.Print("  Decoded equals: ")
 		dec, err := decodeKmers(enc)
@@ -75,7 +75,7 @@ func main() {
 	fmt.Println("Done")
 }
 
-func encodeKmers(kmers []kmr.FullKmer) []byte {
+func encodeKmers(kmers []kmr.Kmer) []byte {
 	buf := bytes.NewBuffer(nil)
 	w := kmr.NewWriter(buf)
 	for _, kmer := range kmers {
@@ -84,9 +84,9 @@ func encodeKmers(kmers []kmr.FullKmer) []byte {
 	return buf.Bytes()
 }
 
-func decodeKmers(kmers []byte) ([]kmr.FullKmer, error) {
+func decodeKmers(kmers []byte) ([]kmr.Kmer, error) {
 	r := kmr.NewReader(bytes.NewBuffer(kmers))
-	var result []kmr.FullKmer
+	var result []kmr.Kmer
 	for {
 		kmer, err := r.Read()
 		if err == io.EOF {

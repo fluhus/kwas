@@ -11,8 +11,8 @@ import (
 
 // Checkpoints returns n canonical kmers that divide the space into approximately
 // equal buckets. The last checkpoint is all T's.
-func Checkpoints(n int) []FullKmer {
-	kmers := make([]FullKmer, n*1000)
+func Checkpoints(n int) []Kmer {
+	kmers := make([]Kmer, n*1000)
 	buf := make([]byte, K)
 	rc := make([]byte, K)
 	for i := range kmers {
@@ -27,10 +27,10 @@ func Checkpoints(n int) []FullKmer {
 	}
 
 	// fmt.Println("Sorting")
-	slices.SortFunc(kmers, func(a, b FullKmer) bool { return a.Less(b) })
-	return snm.Slice(n, func(i int) FullKmer {
+	slices.SortFunc(kmers, func(a, b Kmer) bool { return a.Less(b) })
+	return snm.Slice(n, func(i int) Kmer {
 		if i == n-1 { // Last checkpoint is the maximal kmer.
-			return FullKmer(snm.Slice(K, func(i int) byte { return 255 }))
+			return Kmer(snm.Slice(K, func(i int) byte { return 255 }))
 		}
 		return kmers[(i+1)*1000]
 	})
