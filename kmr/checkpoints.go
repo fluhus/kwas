@@ -12,7 +12,9 @@ import (
 // Checkpoints returns n canonical kmers that divide the space into approximately
 // equal buckets. The last checkpoint is all T's.
 func Checkpoints(n int) []Kmer {
-	kmers := make([]Kmer, n*1000)
+	const multiplier = 100
+
+	kmers := make([]Kmer, n*multiplier)
 	buf := make([]byte, K)
 	rc := make([]byte, K)
 	for i := range kmers {
@@ -26,12 +28,11 @@ func Checkpoints(n int) []Kmer {
 		sequtil.DNATo2Bit(kmers[i][:0], buf)
 	}
 
-	// fmt.Println("Sorting")
 	slices.SortFunc(kmers, func(a, b Kmer) bool { return a.Less(b) })
 	return snm.Slice(n, func(i int) Kmer {
 		if i == n-1 { // Last checkpoint is the maximal kmer.
 			return Kmer(snm.Slice(K, func(i int) byte { return 255 }))
 		}
-		return kmers[(i+1)*1000]
+		return kmers[(i+1)*multiplier]
 	})
 }
