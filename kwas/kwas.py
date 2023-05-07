@@ -1,4 +1,4 @@
-"""Kmer-wide association study (pronounced "kvass")."""
+"""Kmer-wide association study."""
 import argparse
 from datetime import datetime
 from typing import Any, Iterable, Tuple
@@ -43,7 +43,7 @@ def regression(x, y, k):
     else:
         sm_result = sm.OLS(y, x).fit()
 
-    result = {'key': k, 'n': int(x['has'].sum())}
+    result = {'key': k, 'n': int(x['kmer'].sum())}
     coef_interval = sm_result.conf_int()
 
     result[
@@ -57,13 +57,22 @@ def regression(x, y, k):
     return result
 
 
-def xy_iter_gen(exe_fname, has_fname,
-                cov_fname) -> Iterable[Tuple[Any, Any, Any]]:
+def xy_iter_gen(exe_fname, has_fname, cov_fname,
+                y_col) -> Iterable[Tuple[Any, Any, Any]]:
     """Returns an iterator of (X,Y,key) tuples."""
     print('This run:', has_fname)
 
     print('Loading covariate matrix')
-    covariates_df = pd.read_hdf(cov_fname)
+    if cov_fname.endswith('.h5'):
+        covariates_df = pd.read_hdf(cov_fname)
+    elif cov_fname.endswith('.csv'):
+        covariates_df = pd.read_csv(cov_fname)
+    elif cov_fname.endswith('.tsv'):
+        covariates_df = pd.read_csv(cov_fname, sep='\t')
+    else:
+        raise TypeError(
+            f'unsupported file type for {cov_fname}: want .csv or .tsv or .h5')
+    covariates_df['const'] = 1
     print('Covariates:', covariates_df.columns)
     good_rows = ~covariates_df.isna().any(axis=1)
     assert len(good_rows) == len(covariates_df)
@@ -78,22 +87,23 @@ def xy_iter_gen(exe_fname, has_fname,
         n += 1
         has[:] = 0
         has[kmer['samples']] = 1
-        covariates_df['has'] = has
+        covariates_df['kmer'] = has
         # TODO(amit): This can be optimized to avoid [good_rows], which takes ~17%
         #   of the run time.
         yield (
             covariates_df[[x for x in covariates_df.columns
-                           if x != 'bmi']][good_rows],
-            covariates_df[['bmi']][good_rows],
+                           if x != y_col]][good_rows],
+            covariates_df[[y_col]][good_rows],
             kmer['kmer'],
         )
         inc()
     done()
 
 
-def run(exe_fname: str, has_fname: str, out_fname: str, cov_fname: str):
+def run(exe_fname: str, has_fname: str, out_fname: str, cov_fname: str,
+        y_col: str):
     """Runs the KWAS process."""
-    xy_iter = xy_iter_gen(exe_fname, has_fname, cov_fname)
+    xy_iter = xy_iter_gen(exe_fname, has_fname, cov_fname, y_col)
     dicts = (regression(x, y, k) for x, y, k in xy_iter)
     df = pd.DataFrame(dicts)
 
@@ -109,12 +119,13 @@ def main():
     arg_parser.add_argument('-i', required=True, help="Input HAS file")
     arg_parser.add_argument('-c',
                             required=True,
-                            help="Input covariates H5 file")
+                            help="Input covariates CSV/TSV/H5 file")
     arg_parser.add_argument('-o', required=True, help="Output CSV file")
     arg_parser.add_argument('-x', required=True, help="Hastojson executable")
+    arg_parser.add_argument('-y', required=True, help="Y column name")
     args: argparse.Namespace = arg_parser.parse_args()
 
-    run(args.x, args.i, args.o, args.c)
+    run(args.x, args.i, args.o, args.c, args.y)
 
 
 if __name__ == '__main__':
