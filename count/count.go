@@ -57,13 +57,12 @@ func main() {
 	checkpoints := kmr.Checkpoints(1000)
 
 	fmt.Println("Counting")
-	lens := 0
 	pt := ptimer.NewMessasge("{} kmers")
 
-	for _, cp := range checkpoints {
+	for icp, cp := range checkpoints {
 		counts := map[kmr.Kmer]int{}
-		if lens > 0 {
-			counts = make(map[kmr.Kmer]int, lens*3/pt.N/2)
+		if pt.N > 0 {
+			counts = make(map[kmr.Kmer]int, pt.N*3/icp/2)
 		}
 		for i, s := range streams {
 			if s == nil {
@@ -79,7 +78,6 @@ func main() {
 			}
 			util.Die(err)
 		}
-		lens += len(counts)
 		tuples := make([]kmr.CountTuple, 0, len(counts))
 		for k, v := range counts {
 			tuples = append(tuples, kmr.CountTuple{Kmer: k, Count: uint64(v)})
@@ -94,7 +92,6 @@ func main() {
 	}
 	fout.Close()
 	pt.Done()
-	fmt.Println(lens, "kmers")
 }
 
 func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {
