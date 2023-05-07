@@ -2,24 +2,60 @@ import json
 import os
 from argparse import ArgumentParser
 from collections import defaultdict
-from itertools import islice
+from ctypes import CDLL, CFUNCTYPE, POINTER, c_char_p, c_int64, c_uint8
 from os.path import join
-from subprocess import PIPE, Popen
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
-from scipy.sparse import load_npz, save_npz
 from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
 from sklearn.preprocessing import StandardScaler
 
 plt.style.use('ggplot')
 
-# TODO(amit): Make PCAs run on entire matrix and use disjoint cells.
 # TODO(amit): Put main code in a function.
+
+
+def load_has_raw():
+    """Calls the low-level code for loading the HAS matrix.
+    Returns a numpy array of 1/0 and the kmers as strings."""
+    allocfunc = CFUNCTYPE(None, c_int64, c_int64, c_int64)
+    puint8 = POINTER(c_uint8)
+    pstr = POINTER(c_char_p)
+
+    load = CDLL(libfile).cLoadMatrix
+    load.argtypes = [c_char_p, allocfunc, POINTER(puint8), POINTER(pstr)]
+
+    buf: np.ndarray = None
+    pbuf = (1 * puint8)(puint8())
+    pkmers = (1 * pstr)(pstr())
+    nkmers = 0
+
+    @allocfunc
+    def alloc(nvals, nk, k):
+        """Allocates buffers for the matrix data."""
+        nonlocal buf, pbuf, pkmers, nkmers
+        buf = np.zeros(nvals, dtype='uint8')
+        pbuf[0] = buf.ctypes.data_as(puint8)
+        strs = [('\0' * (k + 1)).encode() for _ in range(nk)]
+        pkmers[0] = (nk * c_char_p)(*strs)
+        nkmers = nk
+
+    load(infile.encode(), alloc, pbuf, pkmers)
+    kmers = [pkmers[0][i].decode() for i in range(nkmers)]
+    buf = buf.reshape([nkmers, len(buf) // nkmers])
+
+    return buf, kmers
+
+
+def load_has():
+    """Returns a dataframe with HAS data."""
+    buf, kmers = load_has_raw()
+    df = pd.DataFrame(buf)
+    df.index = kmers
+    return df.transpose()
 
 
 def try_setproctitle():
@@ -29,56 +65,6 @@ def try_setproctitle():
     except ModuleNotFoundError:
         return
     setproctitle('popstr')
-
-
-def save_sparse_df(df: pd.DataFrame, path: str):
-    """Saves a sparse dataframe to a file."""
-    save_npz(path + '.npz', df.sparse.to_coo())
-    json.dump([df.index.tolist(), df.columns.tolist()],
-              open(path + '.json', 'wt'))
-
-
-def load_sparse_df(path: str) -> pd.DataFrame:
-    """Loads a sparse dataframe from a file."""
-    df = pd.DataFrame.sparse.from_spmatrix(load_npz(path + '.npz'))
-    df.index, df.columns = json.load(open(path + '.json'))
-    return df
-
-
-def read_has() -> Iterable[dict]:
-    """Reads a HAS file and returns an iterable of kmers."""
-    p = Popen(['hastojson', '-i', infile], text=True, stdout=PIPE)
-    return (json.loads(line) for line in p.stdout)
-
-
-def read_df(short: int = None) -> pd.DataFrame:
-    """Reads a samples*kmers dataframe from a HAS file."""
-    fname = join(outdir, 'popstr_df')
-    if os.path.exists(fname + '.npz'):
-        print('Loading npz')
-        return load_sparse_df(fname)
-    raw = read_has()
-    if short:
-        raw = islice(raw, short)
-
-    # Separate kmers from samples.
-    kmers = []
-    dicts = ([
-        kmers.append(obj['kmer']),
-        {x: 1
-         for x in obj['samples']},
-    ][1] for obj in raw)
-
-    print('Building dataframe')
-    df = pd.DataFrame(dicts, dtype=float)
-    df.index = kmers
-    print('Fixing NAs')
-    df.replace(np.nan, 0, inplace=True)
-    print('Converting type')
-    df = df.transpose().astype('Sparse[int8]')
-    print('Saving')
-    save_sparse_df(df, fname)
-    return df
 
 
 def random_rows_cols(a, r, c):
@@ -168,11 +154,13 @@ def create_final_pca(n):
     json.dump(evr.tolist(), open(evr_file, 'wt'))
 
 
-def plot_subsample_projections(steps):
+def plot_subsample_projections(steps: int):
+    """Plots PCA projections of subsamples of the matrix."""
+    ratios = [2**i for i in range(steps)]
+    ratios.reverse()
     plt.figure(dpi=150, figsize=(15, 10))
-    for i, a in enumerate(steps):
+    for i, a in enumerate(ratios):
         plt.subplot(231 + i)
-        print('PCA')
         randr, randc = random_rows_cols(m, rr // a, cc // a)
         mini = mini_pca(m, randr, randc, b=m2)
         plt.scatter(mini[:, 0], mini[:, 1], alpha=0.3)
@@ -184,24 +172,38 @@ def plot_subsample_projections(steps):
     plt.close()
 
 
-def plot_distances_mds(rats):
+def plot_distances_mds(steps: int, ss_samples=False):
+    """Plots distance PCoA for subsamples of different sizes."""
     plt.figure(dpi=150)
-    max_iter = 2
     dists = []
-    rrows = subset(rr, rr // 10)
+    rrows = subset(rr, rr)
     groups = []
-    labels = []
-    for rat in rats:
-        for a in range(min(rat, max_iter)):
-            for b in range(min(rat, max_iter)):
-                rrange = np.arange(round(rr / rat * a),
-                                   round(rr / rat * (a + 1)))
-                crange = np.arange(round(cc / rat * b),
-                                   round(cc / rat * (b + 1)))
-                print(f'PCA {rat} {a} {b}')
-                dists.append(pca_distances(rrange, crange, rrows, n=2))
-                groups.append(f'{rr//rat} samples, {cc//rat} k-mers')
-                labels.append(f'{rat},{a},{b}')
+    cur_rr, cur_cc = rr, cc
+    for _ in range(steps):
+        if ss_samples:
+            # Subsample samples & kmers:
+            # xo
+            # oo
+            blocks = [
+                [[0, cur_rr // 2], [cur_cc // 2, cur_cc]],
+                [[cur_rr // 2, cur_rr], [0, cur_cc // 2]],
+                [[cur_rr // 2, cur_rr], [cur_cc // 2, cur_cc]],
+            ]
+        else:
+            # Subsample only kmers:
+            # xooo
+            # xooo
+            # xooo
+            # xooo
+            blocks = [[[0, cur_rr], [cur_cc * i // 4, cur_cc * (i + 1) // 4]]
+                      for i in range(1, 4)]
+        for block in blocks:
+            rrange = np.arange(*block[0])
+            crange = np.arange(*block[1])
+            dists.append(pca_distances(rrange, crange, rrows, n=2))
+            groups.append(f'{cur_rr} samples, {cur_cc} k-mers')
+        cur_rr //= (2 if ss_samples else 1)
+        cur_cc //= (2 if ss_samples else 4)
     dists = np.array(dists)
     mds = my_mds_cosine(dists)
     for k, v in groupby(zip(mds, groups), lambda x: x[1],
@@ -220,18 +222,24 @@ try_setproctitle()
 parser = ArgumentParser()
 parser.add_argument('-o', type=str, help='Output directory', default='.')
 parser.add_argument('-i', type=str, help='Input HAS file', required=True)
+parser.add_argument('-s', type=str, help='Hasmat library file', required=True)
 args = parser.parse_args()
 
 infile = args.i
 outdir = args.o
+libfile = args.s
 
-os.makedirs(outdir)
+os.makedirs(outdir, exist_ok=True)
 
-df = read_df()
+print('Loading data')
+df = load_has()
 m = df.values
+nval = m.shape[0] * m.shape[1]
+print(f'Shape: {m.shape} ({nval/2**20:.0f}m values)')
+del nval
+
 print('Shuffling')
 m = shuffle_rows_cols(m)
-print(m.shape, m.dtype)
 rr, cc = m.shape
 
 # Divide samples to 2, one half for calculating PCA and one for testing.
@@ -239,6 +247,6 @@ m2 = m[rr // 2:]
 m = m[:rr // 2]
 rr, cc = m.shape
 
-plot_subsample_projections([300, 100, 30, 10, 3, 1])
-plot_distances_mds([300, 100, 30, 10, 3, 1])
+plot_subsample_projections(6)
+plot_distances_mds(5, False)
 create_final_pca(10)
