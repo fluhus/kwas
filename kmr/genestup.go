@@ -15,8 +15,8 @@ type GeneSetTuple struct {
 	Genes sets.Set[string]
 }
 
-func (t *GeneSetTuple) GetKmer() []byte {
-	return t.Kmer[:]
+func (t *GeneSetTuple) GetKmer() Kmer {
+	return t.Kmer
 }
 
 func (t *GeneSetTuple) Encode(w io.Writer) error {

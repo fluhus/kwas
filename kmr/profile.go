@@ -124,8 +124,8 @@ type ProfileTuple struct {
 	C    ProfileSampleCounts
 }
 
-func (t *ProfileTuple) GetKmer() []byte {
-	return t.Kmer[:]
+func (t *ProfileTuple) GetKmer() Kmer {
+	return t.Kmer
 }
 
 func (t *ProfileTuple) Encode(w io.Writer) error {

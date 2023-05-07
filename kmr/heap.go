@@ -3,7 +3,6 @@
 package kmr
 
 import (
-	"bytes"
 	"container/heap"
 	"fmt"
 	"io"
@@ -13,7 +12,7 @@ import (
 
 // Tuple is a type that has a kmer and some data related to that kmer.
 type Tuple interface {
-	GetKmer() []byte            // Returns the tuple's kmer
+	GetKmer() Kmer              // Returns the tuple's kmer
 	Encode(io.Writer) error     // Writes the tuple
 	Decode(io.ByteReader) error // Loads a tuple into this object
 	Add(Tuple)                  // Adds another tuple of the same kmer to this
@@ -90,7 +89,7 @@ func (m *Merger) Next() (Tuple, error) {
 		if err := m.nextMin(); err != nil {
 			return nil, err
 		}
-		if m.Len() == 0 || !bytes.Equal((*m)[0].cur.GetKmer(), result.GetKmer()) {
+		if m.Len() == 0 || (*m)[0].cur.GetKmer() != result.GetKmer() {
 			break
 		}
 		result.Add((*m)[0].cur)
@@ -144,7 +143,7 @@ func (m *Merger) Len() int {
 func (m *Merger) Less(i, j int) bool {
 	icur := (*m)[i].cur
 	jcur := (*m)[j].cur
-	return bytes.Compare(icur.GetKmer(), jcur.GetKmer()) == -1
+	return icur.GetKmer().Less(jcur.GetKmer())
 }
 func (m *Merger) Swap(i, j int) {
 	(*m)[i], (*m)[j] = (*m)[j], (*m)[i]

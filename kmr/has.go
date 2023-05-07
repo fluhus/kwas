@@ -14,8 +14,8 @@ type CountTuple struct {
 	Count uint64
 }
 
-func (p *CountTuple) GetKmer() []byte {
-	return p.Kmer[:]
+func (p *CountTuple) GetKmer() Kmer {
+	return p.Kmer
 }
 
 func (p *CountTuple) Add(other Tuple) {
@@ -54,8 +54,8 @@ type HasTuple struct {
 	Sort    bool
 }
 
-func (t *HasTuple) GetKmer() []byte {
-	return t.Kmer[:]
+func (t *HasTuple) GetKmer() Kmer {
+	return t.Kmer
 }
 
 func (t *HasTuple) Copy() Tuple {
