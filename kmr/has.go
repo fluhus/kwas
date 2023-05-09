@@ -35,7 +35,7 @@ func (p *CountTuple) Encode(w io.Writer) error {
 }
 
 func (p *CountTuple) Decode(r io.ByteReader) error {
-	var b []byte
+	b := p.Kmer[:0]
 	if err := bnry.Read(r, &b, &p.Count); err != nil {
 		return err
 	}
@@ -43,7 +43,6 @@ func (p *CountTuple) Decode(r io.ByteReader) error {
 		return fmt.Errorf("unexpected length: %d, want %d",
 			len(b), len(p.Kmer))
 	}
-	copy(p.Kmer[:], b)
 	return nil
 }
 
@@ -87,14 +86,13 @@ func (t *HasTuple) Encode(w io.Writer) error {
 }
 
 func (t *HasTuple) Decode(r io.ByteReader) error {
-	var b []byte
+	b := t.Kmer[:0]
 	if err := bnry.Read(r, &b, &t.Samples); err != nil {
 		return err
 	}
 	if len(b) != len(t.Kmer) {
 		return fmt.Errorf("bad kmer length: %v, want %v", len(b), len(t.Kmer))
 	}
-	copy(t.Kmer[:], b)
 	fromDiffs(t.Samples)
 	return nil
 }
