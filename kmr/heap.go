@@ -3,11 +3,11 @@
 package kmr
 
 import (
-	"container/heap"
 	"fmt"
 	"io"
 
-	"github.com/fluhus/kwas/progress"
+	"github.com/fluhus/gostuff/heaps"
+	"github.com/fluhus/gostuff/ptimer"
 )
 
 // Tuple is a type that has a kmer and some data related to that kmer.
@@ -65,7 +65,16 @@ func (it *kmerIter) String() string {
 }
 
 // Merger merges sorted streams of kmer tuples.
-type Merger []*kmerIter
+type Merger struct {
+	h *heaps.Heap[*kmerIter]
+}
+
+// NewMerger returns a new merger.
+func NewMerger() *Merger {
+	return &Merger{heaps.New(func(ki1, ki2 *kmerIter) bool {
+		return ki1.cur.GetKmer().Less(ki2.cur.GetKmer())
+	})}
+}
 
 // Add adds an input stream to be merged by this merger.
 func (m *Merger) Add(r io.ByteReader, t Tuple) error {
@@ -73,26 +82,26 @@ func (m *Merger) Add(r io.ByteReader, t Tuple) error {
 	if err != nil {
 		return err
 	}
-	heap.Push(m, it)
+	m.h.Push(it)
 	return nil
 }
 
 // Next returns the next kmer tuple, possible merged from a several streams.
 // Returned kmers are sorted.
 func (m *Merger) Next() (Tuple, error) {
-	if m.Len() == 0 {
+	if m.h.Len() == 0 {
 		panic("called next() on an empty heap")
 	}
 
-	result := (*m)[0].cur.Copy()
+	result := m.h.Head().cur.Copy()
 	for {
 		if err := m.nextMin(); err != nil {
 			return nil, err
 		}
-		if m.Len() == 0 || (*m)[0].cur.GetKmer() != result.GetKmer() {
+		if m.h.Len() == 0 || m.h.Head().cur.GetKmer() != result.GetKmer() {
 			break
 		}
-		result.Add((*m)[0].cur)
+		result.Add(m.h.Head().cur)
 	}
 
 	return result, nil
@@ -100,26 +109,26 @@ func (m *Merger) Next() (Tuple, error) {
 
 // Advances the minimal iterator and fixes the heap.
 func (m *Merger) nextMin() error {
-	err := (*m)[0].next()
+	err := m.h.Head().next()
 	if err == io.EOF {
-		heap.Pop(m)
+		m.h.Pop()
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	heap.Fix(m, 0)
+	m.h.Fix(0)
 	return nil
 }
 
 // Dump merges all the remaining kmer tuples and writes them to the given writer.
 func (m *Merger) Dump(w io.Writer) error {
 	n := 0
-	pt := progress.NewTimerFunc(func(i int) string {
+	pt := ptimer.NewFunc(func(i int) string {
 		return fmt.Sprintf("%d kmers dumped", i)
 	})
 
-	for m.Len() > 0 {
+	for m.h.Len() > 0 {
 		tup, err := m.Next()
 		if err != nil {
 			return err
@@ -133,26 +142,4 @@ func (m *Merger) Dump(w io.Writer) error {
 	}
 	pt.Done()
 	return nil
-}
-
-// Heap interface
-
-func (m *Merger) Len() int {
-	return len(*m)
-}
-func (m *Merger) Less(i, j int) bool {
-	icur := (*m)[i].cur
-	jcur := (*m)[j].cur
-	return icur.GetKmer().Less(jcur.GetKmer())
-}
-func (m *Merger) Swap(i, j int) {
-	(*m)[i], (*m)[j] = (*m)[j], (*m)[i]
-}
-func (m *Merger) Push(a interface{}) {
-	*m = append(*m, a.(*kmerIter))
-}
-func (m *Merger) Pop() interface{} {
-	result := (*m)[len(*m)-1]
-	*m = (*m)[:len(*m)-1]
-	return result
 }

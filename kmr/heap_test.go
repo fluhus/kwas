@@ -60,7 +60,7 @@ func TestMergerHas(t *testing.T) {
 		{Kmer: Kmer{6}, Samples: []int{10, 14}},
 	}
 
-	m := &Merger{}
+	m := NewMerger()
 	for i := range bufs {
 		if err := m.Add(bufs[i], &HasTuple{Sort: true}); err != nil {
 			t.Fatalf("Add(...) failed: %v", err)
