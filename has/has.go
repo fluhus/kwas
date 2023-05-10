@@ -1,105 +1,100 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
-	"sort"
-	"time"
 
-	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
-	"github.com/fluhus/kwas/kmc"
+	"github.com/fluhus/gostuff/bnry"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/kmr"
-	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
+	"golang.org/x/exp/slices"
 )
 
 var (
-	p    = flag.Int("p", 0, "Sample part number")
-	np   = flag.Int("np", 0, "Number of sample parts")
-	inf  = flag.String("i", "", "Input filtered count file")
-	outf = flag.String("o", "", "Output file")
-	ff   = flag.String("f", "", "File containing input file names")
+	p       = flag.Int("p", 1, "Sample part number")
+	np      = flag.Int("np", 1, "Number of sample parts")
+	wlFile  = flag.String("i", "", "Input filtered count file")
+	outFile = flag.String("o", "", "Output file")
+	ff      = flag.String("f", "", "File containing input file names")
 )
 
 func main() {
 	flag.Parse()
 
-	fmt.Println("Reading kmer whitelist")
-	kmers, err := readKmerWhitelist()
-	util.Die(err)
-	fmt.Println("Found", len(kmers), "kmers")
-
-	// TODO(amit): Allow input files in args like in count.
 	files, err := util.ReadLines(aio.Open(*ff))
 	util.Die(err)
 	files, idx := util.ChooseStrings(files, *p-1, *np)
 	fmt.Println("Found", len(files), "files to count")
 
-	for i, file := range files {
-		fmt.Printf("Opening %v/%v: %s\n", i+1, len(files), file)
-		t := time.Now()
-		var buf kmr.FullKmer
-		util.Die(kmc.KMC2(func(kmer []byte, count int) {
-			sequtil.DNATo2Bit(buf[:0], kmer)
-			if _, ok := kmers[buf]; !ok {
-				return
-			}
-			kmers[buf] = append(kmers[buf], idx[i])
-		}, file, kmc.OptionK(kmr.K)))
-		fmt.Println("Took", time.Since(t))
+	fmt.Println("Opening files")
+	var streams []*util.Unreader[kmr.Kmer]
+	for _, file := range files {
+		s, err := newUnreader(file)
+		util.Die(err)
+		streams = append(streams, s)
 	}
 
-	fmt.Println("Collecting")
-	keys := make([]kmr.FullKmer, 0, len(kmers))
-	for kmer, idx := range kmers {
-		if idx == nil {
-			continue
-		}
-		keys = append(keys, kmer)
-	}
-	fmt.Println(len(keys), "kmers")
-
-	fmt.Println("Sorting")
-	pt := progress.NewTimer()
-	sort.Slice(keys, func(i, j int) bool {
-		return bytes.Compare(keys[i][:], keys[j][:]) == -1
-	})
-	pt.Done()
-
-	fmt.Println("Writing")
-	fout, err := aio.Create(*outf)
-	pt = progress.NewTimer()
+	wlr, err := newUnreader(*wlFile)
 	util.Die(err)
-	for _, kmer := range keys {
-		tup := &kmr.HasTuple{Kmer: kmer, Samples: kmers[kmer]}
-		util.Die(tup.Encode(fout))
-		pt.Inc()
+
+	fout, err := aio.Create(*outFile)
+	util.Die(err)
+	wout := bnry.NewWriter(fout)
+
+	fmt.Println("Reading")
+	pt := ptimer.New()
+
+	for _, cp := range kmr.Checkpoints(5000) {
+		has := map[kmr.Kmer][]int{}
+		err := wlr.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
+			has[kmer] = nil
+			return nil
+		})
+		if err != io.EOF {
+			util.Die(err)
+		}
+		for i, s := range streams {
+			err := s.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
+				if haskmer, ok := has[kmer]; ok {
+					has[kmer] = append(haskmer, idx[i])
+				}
+				return nil
+			})
+			if err != io.EOF {
+				util.Die(err)
+			}
+		}
+		var slice []kmr.HasTuple
+		for k, v := range has {
+			if len(v) > 0 {
+				slice = append(slice, kmr.HasTuple{Kmer: k, Data: kmr.KmerHas{Samples: v}})
+			}
+		}
+		slices.SortFunc(slice, func(a, b kmr.HasTuple) bool {
+			return a.Kmer.Less(b.Kmer)
+		})
+		for _, kmer := range slice {
+			util.Die(kmer.Encode(wout))
+			pt.Inc()
+		}
 	}
+
+	util.Die(fout.Close())
 	pt.Done()
-	fout.Close()
 
 	fmt.Println("Done")
 }
 
-// Reads the kmer whitelist into a ready map.
-func readKmerWhitelist() (map[kmr.FullKmer][]int, error) {
-	f, err := aio.Open(*inf)
+// Returns an unreader of kmer files.
+func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {
+	// TODO(amit): Close input file.
+	f, err := aio.Open(file)
 	if err != nil {
 		return nil, err
 	}
-	m := map[kmr.FullKmer][]int{}
-	cnt := &kmr.HasCount{}
-	pt := progress.NewTimer()
-	for err = cnt.Decode(f); err == nil; err = cnt.Decode(f) {
-		pt.Inc()
-		m[cnt.Kmer] = nil
-	}
-	pt.Done()
-	if err != io.EOF {
-		return nil, err
-	}
-	return m, nil
+	r := kmr.NewReader(f)
+	return util.NewUnreader(r.Read), nil
 }
