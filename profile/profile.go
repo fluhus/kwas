@@ -9,6 +9,7 @@ import (
 	"github.com/fluhus/biostuff/formats/fastq"
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/sets"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
@@ -112,12 +113,15 @@ func main() {
 	pt = progress.NewTimer()
 	out, err := aio.Create(*fout)
 	util.Die(err)
+	w := bnry.NewWriter(out)
 	for _, key := range keys {
 		util.Die((&kmr.ProfileTuple{
 			Kmer: keys2bit[key],
-			P:    *ps.Get(key),
-			C:    ps.Get(key).SingleSampleCount(),
-		}).Encode(out))
+			Data: &kmr.ProfileData{
+				P: *ps.Get(key),
+				C: ps.Get(key).SingleSampleCount(),
+			},
+		}).Encode(w))
 		pt.Inc()
 	}
 	out.Close()

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	K   = 20          // Kmer length.
+	K   = 18          // Kmer length.
 	K2B = (K + 3) / 4 // 2-bit kmer length.
 )
 

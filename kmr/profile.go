@@ -118,52 +118,46 @@ func (s ProfileSet[T]) Add(other ProfileSet[T]) {
 	}
 }
 
-type ProfileTuple struct {
-	Kmer Kmer
-	P    Profile
-	C    ProfileSampleCounts
+type ProfileData struct {
+	P Profile
+	C ProfileSampleCounts
 }
 
-func (t *ProfileTuple) GetKmer() Kmer {
-	return t.Kmer
+type ProfileHandler struct{}
+
+type ProfileTuple = KmerTuple[*ProfileData, ProfileHandler]
+
+func (h ProfileHandler) encode(p *ProfileData, w *bnry.Writer) error {
+	return w.Write(p.P.flatten(), p.C[:])
 }
 
-func (t *ProfileTuple) Encode(w io.Writer) error {
-	return bnry.Write(w, t.Kmer[:], t.P.flatten(), t.C[:])
-
-}
-
-func (t *ProfileTuple) Decode(r io.ByteReader) error {
-	var kmer []byte
-	var p, c []int64
-	if err := bnry.Read(r, &kmer, &p, &c); err != nil {
+func (h ProfileHandler) decode(p **ProfileData, r io.ByteReader) error {
+	var pp, c []int64
+	if err := bnry.Read(r, &pp, &c); err != nil {
 		return err
 	}
-	if len(kmer) != len(t.Kmer) {
-		return fmt.Errorf("unexpected kmer length: %d, want %d",
-			len(kmer), len(t.Kmer))
-	}
-	if len(p) != len(t.P)*len(t.P[0]) {
+	if len(pp) != len((*p).P)*len((*p).P[0]) {
 		return fmt.Errorf("unexpected profile length: %d, want %d",
-			len(p), len(t.P))
+			len(pp), len((*p).P))
 	}
-	if len(c) != len(t.C) {
+	if len(c) != len((*p).C) {
 		return fmt.Errorf("unexpected counts length: %d, want %d",
-			len(c), len(t.C))
+			len(c), len((*p).C))
 	}
-	copy(t.Kmer[:], kmer)
-	copy(t.C[:], c)
-	t.P.unflatten(p)
+	copy((*p).C[:], c)
+	(*p).P.unflatten(pp)
 	return nil
 }
 
-func (t *ProfileTuple) Add(other Tuple) {
-	t.P.Add(&other.(*ProfileTuple).P)
-	t.C.Add(&other.(*ProfileTuple).C)
+func (h ProfileHandler) merge(a, b *ProfileData) *ProfileData {
+	p := a
+	p.P.Add(&b.P)
+	p.C.Add(&b.C)
+	return p
 }
 
-func (t *ProfileTuple) Copy() Tuple {
-	result := &ProfileTuple{}
-	*result = *t
-	return result
+func (h ProfileHandler) clone(p *ProfileData) *ProfileData {
+	pp := &ProfileData{}
+	*pp = *p
+	return pp
 }

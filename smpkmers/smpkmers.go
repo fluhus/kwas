@@ -7,6 +7,7 @@ import (
 	"math/rand"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
@@ -30,6 +31,7 @@ func main() {
 		kept := 0
 		out, err := aio.Create(*fout)
 		util.Die(err)
+		w := bnry.NewWriter(out)
 		pt := progress.NewTimerFunc(func(i int) string {
 			return fmt.Sprintf("%d (kept %d)", i, kept)
 		})
@@ -38,7 +40,7 @@ func main() {
 				pt.Inc()
 				if rand.Float64() < ratio {
 					kept++
-					return t.Encode(out)
+					return t.Encode(w)
 				}
 				return nil
 			}))
@@ -49,33 +51,35 @@ func main() {
 		pt := progress.NewTimer()
 		util.Die(
 			kmr.IterTuplesFiles(*fin, &kmr.HasTuple{}, func(t *kmr.HasTuple) error {
-				r.Add(t.Copy().(*kmr.HasTuple))
+				r.Add(t.Copy())
 				pt.Inc()
 				return nil
 			}))
 		pt.Done()
 		out, err := aio.Create(*fout)
 		util.Die(err)
+		w := bnry.NewWriter(out)
 		for _, t := range r.Sample {
-			util.Die(t.Encode(out))
+			util.Die(t.Encode(w))
 		}
 		util.Die(out.Close())
 	} else if *s != 0 {
 		s := uint64(*s)
 		out, err := aio.Create(*fout)
 		util.Die(err)
+		w := bnry.NewWriter(out)
 		pt := progress.NewTimer()
 		util.Die(
 			kmr.IterTuplesFiles(*fin, &kmr.HasTuple{}, func(t *kmr.HasTuple) error {
 				var samples []int
-				for _, i := range t.Samples {
+				for _, i := range t.Data.Samples {
 					if hashInt(i)%s == 0 {
 						samples = append(samples, i)
 					}
 				}
-				t.Samples = samples
+				t.Data.Samples = samples
 				pt.Inc()
-				return t.Encode(out)
+				return t.Encode(w)
 			}))
 		util.Die(out.Close())
 		pt.Done()

@@ -33,12 +33,13 @@ func loadMatrix(file string) ([][]byte, []kmr.Kmer, error) {
 	err := kmr.IterTuplesFile(file, &kmr.HasTuple{},
 		func(ht *kmr.HasTuple) error {
 			kmers = append(kmers, ht.Kmer)
-			if len(ht.Samples) == 0 {
+			samples := ht.Data.Samples
+			if len(samples) == 0 {
 				vals = append(vals, nil)
 				return nil
 			}
-			v := make([]byte, ht.Samples[len(ht.Samples)-1]+1)
-			for _, s := range ht.Samples {
+			v := make([]byte, samples[len(samples)-1]+1)
+			for _, s := range samples {
 				v[s] = 1
 			}
 			vals = append(vals, v)

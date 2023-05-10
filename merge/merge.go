@@ -36,18 +36,15 @@ func main() {
 
 	fmt.Printf("Reading %v files out of %v\n", len(files), nfiles)
 
-	m := &kmr.Merger{}
-	for _, file := range files {
-		f, err := aio.Open(file)
-		util.Die(err)
-		util.Die(m.Add(f, kmr.TupleFromString(*typ)))
+	switch *typ {
+	case "cnt":
+		err = merge(files, &kmr.CountTuple{})
+	case "has":
+		err = merge(files, &kmr.HasTuple{Data: kmr.KmerHas{SortOnEncode: true}})
+	default:
+		err = fmt.Errorf("unsupported type: %q", *typ)
 	}
-
-	fmt.Println("Writing to:", *out)
-	fout, err := aio.Create(*out)
 	util.Die(err)
-	util.Die(m.Dump(fout))
-	fout.Close()
 
 	if *del {
 		fmt.Println("Removing input files")
@@ -60,6 +57,28 @@ func main() {
 	fmt.Println("Done")
 }
 
+func merge[T any, H kmr.KmerDataHandler[T]](
+	files []string, zero *kmr.KmerTuple[T, H]) error {
+	m := kmr.NewMerger1(&kmr.KmerTuple[T, H]{})
+	for _, file := range files {
+		f, err := aio.Open(file)
+		if err != nil {
+			return err
+		}
+		if err := m.Add(f); err != nil {
+			return err
+		}
+	}
+
+	fmt.Println("Writing to:", *out)
+	fout, err := aio.Create(*out)
+	if err != nil {
+		return err
+	}
+	defer fout.Close()
+	return m.Dump(fout)
+}
+
 func parseArgs() error {
 	flag.Parse()
 	if *in == "" {
@@ -68,8 +87,6 @@ func parseArgs() error {
 	if *out == "" {
 		return fmt.Errorf("empty output path")
 	}
-	if kmr.TupleFromString(*typ) == nil {
-		return fmt.Errorf("unsupported type: %q", *typ)
-	}
+	// TODO(amit): Validate the typ argument.
 	return nil
 }

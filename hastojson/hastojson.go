@@ -34,7 +34,7 @@ func main() {
 	util.Die(kmr.IterTuplesFile(*in, &kmr.HasTuple{}, func(t *kmr.HasTuple) error {
 		return j.Encode(map[string]any{
 			"kmer":    string(sequtil.DNAFrom2Bit(nil, t.Kmer[:])[:kmr.K]),
-			"samples": t.Samples,
+			"samples": t.Data.Samples,
 		})
 	}))
 	util.Die(fout.Close())

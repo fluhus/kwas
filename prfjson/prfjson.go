@@ -42,7 +42,7 @@ func main() {
 }
 
 func tupleToMap(tup *kmr.ProfileTuple) map[string][]float64 {
-	pos := make([]float64, len(tup.P))
+	pos := make([]float64, len(tup.Data.P))
 	for i := range pos {
 		pos[i] = float64(i + 1)
 	}
@@ -52,7 +52,7 @@ func tupleToMap(tup *kmr.ProfileTuple) map[string][]float64 {
 	normalizeByEntropy(&fp)
 	trsp := make([][]float64, 4)
 	for i := range trsp {
-		trsp[i] = make([]float64, len(tup.P))
+		trsp[i] = make([]float64, len(tup.Data.P))
 	}
 
 	for i := range fp {
@@ -67,7 +67,7 @@ func tupleToMap(tup *kmr.ProfileTuple) map[string][]float64 {
 		"C":   trsp[1],
 		"G":   trsp[2],
 		"T":   trsp[3],
-		"n":   gnum.Cast[[]int64, []float64](tup.C[:]),
+		"n":   gnum.Cast[[]int64, []float64](tup.Data.C[:]),
 	}
 }
 
@@ -75,9 +75,9 @@ type fprofile [len(kmr.Profile{})][4]float64
 
 func toFloats(p *kmr.ProfileTuple) fprofile {
 	var result fprofile
-	for i := range p.P {
-		for j := range p.P[i] {
-			result[i][j] = float64(p.P[i][j])
+	for i := range p.Data.P {
+		for j := range p.Data.P[i] {
+			result[i][j] = float64(p.Data.P[i][j])
 		}
 	}
 	return result

@@ -13,6 +13,7 @@ import (
 
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/gnum"
 	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/gostuff/ppln"
@@ -84,8 +85,8 @@ func main() {
 					if e.i == es.i {
 						continue
 					}
-					if util.JaccardDualDist(kmers[ei].Samples, kmers[si].Samples,
-						*nSamples) < thr {
+					if util.JaccardDualDist(kmers[ei].Data.Samples,
+						kmers[si].Data.Samples, *nSamples) < thr {
 						push([2]int{ei, si})
 					}
 				}
@@ -144,8 +145,9 @@ func main() {
 	fmt.Println("Saving centers")
 	fout, err := aio.Create(*output)
 	util.Die(err)
+	w := bnry.NewWriter(fout)
 	for _, c := range centers {
-		util.Die(c.Encode(fout))
+		util.Die(c.Encode(w))
 	}
 	fout.Close()
 
@@ -221,7 +223,7 @@ func sqDistances(kmers []*kmr.HasTuple) []float64 {
 	result := make([]float64, len(kmers))
 	for i, ki := range kmers {
 		for j, kj := range kmers[i+1:] {
-			d := util.JaccardDualDist(ki.Samples, kj.Samples, *nSamples)
+			d := util.JaccardDualDist(ki.Data.Samples, kj.Data.Samples, *nSamples)
 			d *= d
 			result[i] += d
 			result[j+i+1] += d

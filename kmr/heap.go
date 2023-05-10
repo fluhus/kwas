@@ -6,44 +6,21 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/heaps"
 	"github.com/fluhus/gostuff/ptimer"
 )
 
-// Tuple is a type that has a kmer and some data related to that kmer.
-type Tuple interface {
-	GetKmer() Kmer              // Returns the tuple's kmer
-	Encode(io.Writer) error     // Writes the tuple
-	Decode(io.ByteReader) error // Loads a tuple into this object
-	Add(Tuple)                  // Adds another tuple of the same kmer to this
-	Copy() Tuple                // Deep-copies the tuple
-}
-
-// TupleFromString returns a Tuple that matches the given string.
-func TupleFromString(s string) Tuple {
-	switch s {
-	case "has":
-		return &HasTuple{Sort: true}
-	case "cnt":
-		return &CountTuple{}
-	case "prf":
-		return &ProfileTuple{}
-	case "genes":
-		return &GeneSetTuple{}
-	default:
-		return nil
-	}
-}
-
 // An iterator over kmer tuples from an input stream.
-type kmerIter struct {
+type kmerIter1[T any, H KmerDataHandler[T]] struct {
 	r   io.ByteReader
-	cur Tuple
+	cur *KmerTuple[T, H]
 }
 
 // Creates a new iterator over the given input.
-func newKmerIter(r io.ByteReader, t Tuple) (*kmerIter, error) {
-	it := &kmerIter{r: r, cur: t}
+func newKmerIter1[T any, H KmerDataHandler[T]](r io.ByteReader,
+	t *KmerTuple[T, H]) (*kmerIter1[T, H], error) {
+	it := &kmerIter1[T, H]{r: r, cur: t}
 	err := it.next()
 	if err != nil {
 		return nil, err
@@ -52,7 +29,7 @@ func newKmerIter(r io.ByteReader, t Tuple) (*kmerIter, error) {
 }
 
 // Advances the iterator and sets cur to the next kmer tuple.
-func (it *kmerIter) next() error {
+func (it *kmerIter1[T, H]) next() error {
 	err := it.cur.Decode(it.r)
 	if err != nil {
 		it.cur = nil
@@ -60,25 +37,23 @@ func (it *kmerIter) next() error {
 	return err
 }
 
-func (it *kmerIter) String() string {
-	return fmt.Sprintf("{cur:%v}", it.cur.GetKmer())
+// Merger1 merges sorted streams of kmer tuples.
+type Merger1[T any, H KmerDataHandler[T]] struct {
+	h *heaps.Heap[*kmerIter1[T, H]]
+	z *KmerTuple[T, H]
 }
 
-// Merger merges sorted streams of kmer tuples.
-type Merger struct {
-	h *heaps.Heap[*kmerIter]
-}
-
-// NewMerger returns a new merger.
-func NewMerger() *Merger {
-	return &Merger{heaps.New(func(ki1, ki2 *kmerIter) bool {
-		return ki1.cur.GetKmer().Less(ki2.cur.GetKmer())
-	})}
+// NewMerger1 returns a new merger.
+func NewMerger1[T any, H KmerDataHandler[T]](zero *KmerTuple[T, H]) *Merger1[T, H] {
+	return &Merger1[T, H]{
+		heaps.New(func(ki1, ki2 *kmerIter1[T, H]) bool {
+			return ki1.cur.Kmer.Less(ki2.cur.Kmer)
+		}), zero}
 }
 
 // Add adds an input stream to be merged by this merger.
-func (m *Merger) Add(r io.ByteReader, t Tuple) error {
-	it, err := newKmerIter(r, t)
+func (m *Merger1[T, H]) Add(r io.ByteReader) error {
+	it, err := newKmerIter1(r, m.z.Copy())
 	if err != nil {
 		return err
 	}
@@ -88,7 +63,7 @@ func (m *Merger) Add(r io.ByteReader, t Tuple) error {
 
 // Next returns the next kmer tuple, possible merged from a several streams.
 // Returned kmers are sorted.
-func (m *Merger) Next() (Tuple, error) {
+func (m *Merger1[T, H]) Next() (*KmerTuple[T, H], error) {
 	if m.h.Len() == 0 {
 		panic("called next() on an empty heap")
 	}
@@ -98,7 +73,7 @@ func (m *Merger) Next() (Tuple, error) {
 		if err := m.nextMin(); err != nil {
 			return nil, err
 		}
-		if m.h.Len() == 0 || m.h.Head().cur.GetKmer() != result.GetKmer() {
+		if m.h.Len() == 0 || m.h.Head().cur.Kmer != result.Kmer {
 			break
 		}
 		result.Add(m.h.Head().cur)
@@ -108,7 +83,7 @@ func (m *Merger) Next() (Tuple, error) {
 }
 
 // Advances the minimal iterator and fixes the heap.
-func (m *Merger) nextMin() error {
+func (m *Merger1[T, H]) nextMin() error {
 	err := m.h.Head().next()
 	if err == io.EOF {
 		m.h.Pop()
@@ -122,8 +97,8 @@ func (m *Merger) nextMin() error {
 }
 
 // Dump merges all the remaining kmer tuples and writes them to the given writer.
-func (m *Merger) Dump(w io.Writer) error {
-	n := 0
+func (m *Merger1[T, H]) Dump(w io.Writer) error {
+	bw := bnry.NewWriter(w)
 	pt := ptimer.NewFunc(func(i int) string {
 		return fmt.Sprintf("%d kmers dumped", i)
 	})
@@ -133,12 +108,14 @@ func (m *Merger) Dump(w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		err = tup.Encode(w)
+		err = tup.Encode(bw)
 		if err != nil {
 			return err
 		}
-		n++
 		pt.Inc()
+		// if pt.N >= 100000000 {
+		// 	break
+		// } // TODO(amit): REMOVE
 	}
 	pt.Done()
 	return nil

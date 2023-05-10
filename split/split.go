@@ -11,6 +11,7 @@ import (
 
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/lazy"
@@ -37,6 +38,7 @@ func main() {
 	util.Die(err)
 
 	ws := map[uint64]*lazy.Writer{}
+	bws := map[uint64]*bnry.Writer{}
 
 	pt := ptimer.New()
 	t := &kmr.HasTuple{}
@@ -48,11 +50,12 @@ func main() {
 			break
 		}
 		mnz := minimizer(t)
-		w := ws[mnz]
+		w := bws[mnz]
 		if w == nil {
-			w = lazy.NewWriter(strings.ReplaceAll(*outFile, "*",
+			ww := lazy.NewWriter(strings.ReplaceAll(*outFile, "*",
 				fmt.Sprint(mnz)), *bufSize)
-			ws[mnz] = w
+			ws[mnz] = ww
+			bws[mnz] = bnry.NewWriter(ww)
 		}
 		err = t.Encode(w)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/fluhus/gostuff/bnry"
 	"golang.org/x/exp/slices"
 )
 
@@ -135,24 +136,25 @@ func TestProfileSampleCount(t *testing.T) {
 }
 
 func TestProfileTupleEncode(t *testing.T) {
-	input := &ProfileTuple{
-		Kmer: Kmer{1: 2, 3: 4},
+	input := &ProfileData{
 		P: Profile{
 			10: [4]int64{20, 40, 50, 33},
 			12: [4]int64{11111, 12, 0, 0},
 		},
 		C: ProfileSampleCounts{10: 13, 12: 100},
 	}
-	want := &ProfileTuple{}
+	want := &ProfileData{}
 	*want = *input
 
 	buf := bytes.NewBuffer(nil)
-	if err := input.Encode(buf); err != nil {
+	bw := bnry.NewWriter(buf)
+	h := ProfileHandler{}
+	if err := h.encode(input, bw); err != nil {
 		t.Fatalf("Encode() failed: %v", err)
 	}
 
-	got := &ProfileTuple{}
-	if err := got.Decode(buf); err != nil {
+	got := &ProfileData{}
+	if err := h.decode(&got, buf); err != nil {
 		t.Fatalf("Decode() failed: %v", err)
 	}
 

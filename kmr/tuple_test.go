@@ -2,80 +2,87 @@ package kmr
 
 import (
 	"bytes"
-	"reflect"
+	"fmt"
 	"testing"
 
+	"github.com/fluhus/gostuff/bnry"
 	"golang.org/x/exp/slices"
 )
 
-func TestPrabCountAdd(t *testing.T) {
-	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{Kmer{1, 2, 3, 4}, 321}
+func TestCountTuple_add(t *testing.T) {
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{321}}
 	a.Add(b)
-	want := uint64(444)
-	if a.Count != want {
-		t.Fatalf("Add(...)=%v, want %v", a.Count, want)
+	want := 444
+	if a.Data.Count != want {
+		t.Fatalf("Add(...)=%v, want %v", a.Data.Count, want)
 	}
 }
 
-func TestCountAdd_bad(t *testing.T) {
+func TestCountTuple_bad(t *testing.T) {
 	defer func() { recover() }()
-	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{Kmer{1, 2, 3}, 321}
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3}, Data: KmerCount{321}}
 	a.Add(b)
 	t.Fatalf("Add(...) succeeded, want fail")
 }
 
-func TestCountCopy(t *testing.T) {
-	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{Kmer{1, 2, 3, 4}, 123}
-	c := b.Copy().(*CountTuple)
-	if !reflect.DeepEqual(a, b) {
+func TestCountTuple_copy(t *testing.T) {
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	c := b.Copy()
+	if !countTuplesEqual(a, b) {
 		t.Fatalf("Copy() changed receiver %v, want %v", b, a)
 	}
-	if !reflect.DeepEqual(a, c) {
+	if !countTuplesEqual(a, c) {
 		t.Fatalf("Copy()=%v, want %v", c, a)
 	}
 }
 
-func TestCountEncode(t *testing.T) {
-	a := &CountTuple{Kmer{1, 2, 3, 4}, 123}
-	b := &CountTuple{Kmer{1, 2, 3, 4}, 123}
+func TestCountTuple_encode(t *testing.T) {
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
 	c := &CountTuple{}
 	buf := bytes.NewBuffer(nil)
-	if err := b.Encode(buf); err != nil {
+	fmt.Println(buf.Len())
+	if err := b.Encode(bnry.NewWriter(buf)); err != nil {
 		t.Fatalf("%v.Encode() failed: %v", b, err)
 	}
-	if !reflect.DeepEqual(a, b) {
+	fmt.Println(buf.Len())
+	if !countTuplesEqual(a, b) {
 		t.Fatalf("Encode() changed receiver %v, want %v", b, a)
 	}
 	if err := c.Decode(buf); err != nil {
 		t.Fatalf("%v.Decode() failed: %v", c, err)
 	}
-	if !reflect.DeepEqual(a, c) {
+	if !countTuplesEqual(a, c) {
 		t.Fatalf("Decode()=%v, want %v", c, a)
 	}
 }
 
-func TestHasTupleEncode(t *testing.T) {
+func TestHasTuple_encode(t *testing.T) {
 	tup := &HasTuple{
-		Kmer:    Kmer{},
-		Samples: []int{5, 8, 0, 7, 1},
+		Kmer: Kmer{},
+		Data: KmerHas{
+			Samples: []int{5, 8, 0, 7, 1},
+		},
 	}
 	want := &HasTuple{
-		Kmer:    Kmer{},
-		Samples: []int{5, 8, 0, 7, 1},
+		Kmer: Kmer{},
+		Data: KmerHas{
+			Samples: []int{5, 8, 0, 7, 1},
+		},
 	}
 
 	buf := &bytes.Buffer{}
-	if err := tup.Encode(buf); err != nil {
+	if err := tup.Encode(bnry.NewWriter(buf)); err != nil {
 		t.Fatalf("Encode() failed: %v", err)
 	}
 	got := &HasTuple{}
 	if err := got.Decode(buf); err != nil {
 		t.Fatalf("Decode() failed: %v", err)
 	}
-	if !reflect.DeepEqual(got, want) {
+	if !hasTuplesEqual(got, want) {
 		t.Fatalf("Decode()=%v, want %v", got, want)
 	}
 }
@@ -108,4 +115,12 @@ func TestDiffs_negative(t *testing.T) {
 	if !slices.Equal(slice, input) {
 		t.Fatalf("fromDiffs(%v)=%v, want %v", input, slice, input)
 	}
+}
+
+func countTuplesEqual(a, b *CountTuple) bool {
+	return a.Kmer == b.Kmer && a.Data.Count == b.Data.Count
+}
+
+func hasTuplesEqual(a, b *HasTuple) bool {
+	return a.Kmer == b.Kmer && slices.Equal(a.Data.Samples, b.Data.Samples)
 }

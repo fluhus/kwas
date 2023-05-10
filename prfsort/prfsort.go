@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/util"
 )
@@ -33,7 +34,7 @@ func main() {
 	t = time.Now()
 	ents := map[*kmr.ProfileTuple]float64{}
 	for _, p := range ps {
-		ents[p] = avgEntropy(&p.P)
+		ents[p] = avgEntropy(&p.Data.P)
 	}
 	fmt.Println("Took", time.Since(t))
 
@@ -87,8 +88,9 @@ func saveProfiles(file string, ps []*kmr.ProfileTuple) error {
 		return err
 	}
 	defer f.Close()
+	w := bnry.NewWriter(f)
 	for _, p := range ps {
-		if err := p.Encode(f); err != nil {
+		if err := p.Encode(w); err != nil {
 			return err
 		}
 	}
