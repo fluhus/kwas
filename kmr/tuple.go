@@ -11,13 +11,15 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type KmerTuple[T any, H KmerDataHandler[T]] struct {
+// Tuple holds a kmer and some data attached to it.
+type Tuple[T any, H KmerDataHandler[T]] struct {
 	Kmer    Kmer
 	Data    T
 	Handler H
 	pkmer   []byte
 }
 
+// KmerDataHandler implements functions for handling data in a kmer tuple.
 type KmerDataHandler[T any] interface {
 	encode(T, *bnry.Writer) error   // Writes the data
 	decode(*T, io.ByteReader) error // Loads data into this object
@@ -25,10 +27,14 @@ type KmerDataHandler[T any] interface {
 	clone(T) T                      // Deep-copies the data
 }
 
-type CountTuple = KmerTuple[KmerCount, KmerCountHandler]
-type HasTuple = KmerTuple[KmerHas, KmerHasHandler]
+// CountTuple holds a kmer and its appearance count.
+type CountTuple = Tuple[KmerCount, KmerCountHandler]
 
-func (t *KmerTuple[T, H]) Encode(w *bnry.Writer) error {
+// HasTuple holds a kmer and the sample IDs that have it.
+type HasTuple = Tuple[KmerHas, KmerHasHandler]
+
+// Encode writes this kmer and its data to the writer.
+func (t *Tuple[T, H]) Encode(w *bnry.Writer) error {
 	t.pkmer = t.Kmer[:]
 	if err := w.Write(t.pkmer); err != nil {
 		return err
@@ -39,7 +45,8 @@ func (t *KmerTuple[T, H]) Encode(w *bnry.Writer) error {
 	return nil
 }
 
-func (t *KmerTuple[T, H]) Decode(r io.ByteReader) error {
+// Decode reads a kmer and its data and writes it to this instance.
+func (t *Tuple[T, H]) Decode(r io.ByteReader) error {
 	t.pkmer = t.Kmer[:0]
 	if err := bnry.Read(r, &t.pkmer); err != nil {
 		return err
@@ -54,11 +61,13 @@ func (t *KmerTuple[T, H]) Decode(r io.ByteReader) error {
 	return nil
 }
 
-func (t *KmerTuple[T, H]) Copy() *KmerTuple[T, H] {
-	return &KmerTuple[T, H]{t.Kmer, t.Handler.clone(t.Data), t.Handler, nil}
+// Clone returns a deep copy of this instance.
+func (t *Tuple[T, H]) Clone() *Tuple[T, H] {
+	return &Tuple[T, H]{t.Kmer, t.Handler.clone(t.Data), t.Handler, nil}
 }
 
-func (t *KmerTuple[T, H]) Add(other *KmerTuple[T, H]) {
+// Add adds the data of another kmer to this one.
+func (t *Tuple[T, H]) Add(other *Tuple[T, H]) {
 	if t.Kmer != other.Kmer {
 		panic(fmt.Sprintf("mismatching kmers: %v %v", t.Kmer, other.Kmer))
 	}
@@ -89,7 +98,7 @@ func (h KmerCountHandler) clone(c KmerCount) KmerCount {
 
 type KmerHas struct {
 	Samples      []int
-	SortOnEncode bool
+	SortOnEncode bool // If true, will sort before encoding.
 }
 
 type KmerHasHandler struct{}

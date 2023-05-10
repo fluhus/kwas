@@ -11,7 +11,7 @@ import (
 // IterTuplesFile iterates the given file, calling forEach on each tuple.
 // Reuses init as input to forEach, so keeping instances should use Copy().
 func IterTuplesFile[T any, H KmerDataHandler[T]](file string,
-	init *KmerTuple[T, H], forEach func(*KmerTuple[T, H]) error) error {
+	init *Tuple[T, H], forEach func(*Tuple[T, H]) error) error {
 	f, err := aio.Open(file)
 	if err != nil {
 		return err
@@ -32,7 +32,7 @@ func IterTuplesFile[T any, H KmerDataHandler[T]](file string,
 // calling forEach on each tuple.
 // Reuses init as input to forEach, so keeping instances should use Copy().
 func IterTuplesFiles[T any, H KmerDataHandler[T]](glob string,
-	init *KmerTuple[T, H], forEach func(*KmerTuple[T, H]) error) error {
+	init *Tuple[T, H], forEach func(*Tuple[T, H]) error) error {
 	files, err := filepath.Glob(glob)
 	if err != nil {
 		return err

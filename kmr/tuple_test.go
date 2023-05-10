@@ -30,7 +30,7 @@ func TestCountTuple_bad(t *testing.T) {
 func TestCountTuple_copy(t *testing.T) {
 	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
 	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
-	c := b.Copy()
+	c := b.Clone()
 	if !countTuplesEqual(a, b) {
 		t.Fatalf("Copy() changed receiver %v, want %v", b, a)
 	}

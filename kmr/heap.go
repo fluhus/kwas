@@ -14,12 +14,12 @@ import (
 // An iterator over kmer tuples from an input stream.
 type kmerIter1[T any, H KmerDataHandler[T]] struct {
 	r   io.ByteReader
-	cur *KmerTuple[T, H]
+	cur *Tuple[T, H]
 }
 
 // Creates a new iterator over the given input.
 func newKmerIter1[T any, H KmerDataHandler[T]](r io.ByteReader,
-	t *KmerTuple[T, H]) (*kmerIter1[T, H], error) {
+	t *Tuple[T, H]) (*kmerIter1[T, H], error) {
 	it := &kmerIter1[T, H]{r: r, cur: t}
 	err := it.next()
 	if err != nil {
@@ -40,11 +40,11 @@ func (it *kmerIter1[T, H]) next() error {
 // Merger1 merges sorted streams of kmer tuples.
 type Merger1[T any, H KmerDataHandler[T]] struct {
 	h *heaps.Heap[*kmerIter1[T, H]]
-	z *KmerTuple[T, H]
+	z *Tuple[T, H]
 }
 
 // NewMerger1 returns a new merger.
-func NewMerger1[T any, H KmerDataHandler[T]](zero *KmerTuple[T, H]) *Merger1[T, H] {
+func NewMerger1[T any, H KmerDataHandler[T]](zero *Tuple[T, H]) *Merger1[T, H] {
 	return &Merger1[T, H]{
 		heaps.New(func(ki1, ki2 *kmerIter1[T, H]) bool {
 			return ki1.cur.Kmer.Less(ki2.cur.Kmer)
@@ -53,7 +53,7 @@ func NewMerger1[T any, H KmerDataHandler[T]](zero *KmerTuple[T, H]) *Merger1[T, 
 
 // Add adds an input stream to be merged by this merger.
 func (m *Merger1[T, H]) Add(r io.ByteReader) error {
-	it, err := newKmerIter1(r, m.z.Copy())
+	it, err := newKmerIter1(r, m.z.Clone())
 	if err != nil {
 		return err
 	}
@@ -63,12 +63,12 @@ func (m *Merger1[T, H]) Add(r io.ByteReader) error {
 
 // Next returns the next kmer tuple, possible merged from a several streams.
 // Returned kmers are sorted.
-func (m *Merger1[T, H]) Next() (*KmerTuple[T, H], error) {
+func (m *Merger1[T, H]) Next() (*Tuple[T, H], error) {
 	if m.h.Len() == 0 {
 		panic("called next() on an empty heap")
 	}
 
-	result := m.h.Head().cur.Copy()
+	result := m.h.Head().cur.Clone()
 	for {
 		if err := m.nextMin(); err != nil {
 			return nil, err

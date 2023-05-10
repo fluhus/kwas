@@ -16,7 +16,7 @@ import (
 var (
 	inFile  = flag.String("i", "", "Path to input file")
 	outFile = flag.String("o", "", "Path to output file")
-	min     = flag.Uint64("n", 0, "Minimal count to leave a kmer in")
+	min     = flag.Int("n", 0, "Minimal count to leave a kmer in")
 	del     = flag.Bool("d", false, "Delete input file")
 )
 
@@ -42,7 +42,7 @@ func main() {
 			util.Die(fmt.Errorf("kmers not in order: %v %v", last, cnt.Kmer))
 		}
 		last = cnt.Kmer
-		if cnt.Count < *min {
+		if cnt.Data.Count < *min {
 			continue
 		}
 		kept++

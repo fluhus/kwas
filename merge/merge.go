@@ -58,8 +58,8 @@ func main() {
 }
 
 func merge[T any, H kmr.KmerDataHandler[T]](
-	files []string, zero *kmr.KmerTuple[T, H]) error {
-	m := kmr.NewMerger1(&kmr.KmerTuple[T, H]{})
+	files []string, zero *kmr.Tuple[T, H]) error {
+	m := kmr.NewMerger1(&kmr.Tuple[T, H]{})
 	for _, file := range files {
 		f, err := aio.Open(file)
 		if err != nil {

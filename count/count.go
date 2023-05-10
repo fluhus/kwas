@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/kmr"
 	"github.com/fluhus/kwas/util"
@@ -52,6 +53,7 @@ func main() {
 
 	fout, err := aio.Create(*out)
 	util.Die(err)
+	wout := bnry.NewWriter(fout)
 
 	fmt.Println("Creating checkpoints")
 	checkpoints := kmr.Checkpoints(1000)
@@ -80,18 +82,21 @@ func main() {
 		}
 		tuples := make([]kmr.CountTuple, 0, len(counts))
 		for k, v := range counts {
-			tuples = append(tuples, kmr.CountTuple{Kmer: k, Count: uint64(v)})
+			tuples = append(tuples,
+				kmr.CountTuple{Kmer: k, Data: kmr.KmerCount{Count: v}})
 		}
 		slices.SortFunc(tuples, func(a, b kmr.CountTuple) bool {
 			return a.Kmer.Less(b.Kmer)
 		})
 		for _, t := range tuples {
-			t.Encode(fout)
+			t.Encode(wout)
 			pt.Inc()
 		}
 	}
 	fout.Close()
 	pt.Done()
+
+	fmt.Println("Done")
 }
 
 func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {

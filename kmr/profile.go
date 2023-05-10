@@ -125,7 +125,7 @@ type ProfileData struct {
 
 type ProfileHandler struct{}
 
-type ProfileTuple = KmerTuple[*ProfileData, ProfileHandler]
+type ProfileTuple = Tuple[*ProfileData, ProfileHandler]
 
 func (h ProfileHandler) encode(p *ProfileData, w *bnry.Writer) error {
 	return w.Write(p.P.flatten(), p.C[:])

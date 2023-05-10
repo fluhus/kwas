@@ -51,7 +51,7 @@ func main() {
 		pt := progress.NewTimer()
 		util.Die(
 			kmr.IterTuplesFiles(*fin, &kmr.HasTuple{}, func(t *kmr.HasTuple) error {
-				r.Add(t.Copy())
+				r.Add(t.Clone())
 				pt.Inc()
 				return nil
 			}))
