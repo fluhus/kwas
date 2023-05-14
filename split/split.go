@@ -55,7 +55,8 @@ func main() {
 			ww := lazy.NewWriter(strings.ReplaceAll(*outFile, "*",
 				fmt.Sprint(mnz)), *bufSize)
 			ws[mnz] = ww
-			bws[mnz] = bnry.NewWriter(ww)
+			w = bnry.NewWriter(ww)
+			bws[mnz] = w
 		}
 		err = t.Encode(w)
 		if err != nil {
