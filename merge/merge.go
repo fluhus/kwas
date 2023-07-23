@@ -40,6 +40,7 @@ func main() {
 	case "cnt":
 		err = merge(files, &kmr.CountTuple{})
 	case "has":
+		// Sort on encode for compression.
 		err = merge(files, &kmr.HasTuple{Data: kmr.KmerHas{SortOnEncode: true}})
 	default:
 		err = fmt.Errorf("unsupported type: %q", *typ)
@@ -57,9 +58,10 @@ func main() {
 	fmt.Println("Done")
 }
 
+// Merges the given files using the given zero tuple.
 func merge[T any, H kmr.KmerDataHandler[T]](
 	files []string, zero *kmr.Tuple[T, H]) error {
-	m := kmr.NewMerger1(&kmr.Tuple[T, H]{})
+	m := kmr.NewMerger1(zero)
 	for _, file := range files {
 		f, err := aio.Open(file)
 		if err != nil {
