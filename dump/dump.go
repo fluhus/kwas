@@ -26,7 +26,7 @@ var (
 func main() {
 	flag.Parse()
 
-	fmt.Println("Reading kmers")
+	fmt.Printf("Reading kmers (K=%d\n)", kmr.K)
 	pt := ptimer.New()
 	var kmers []kmr.Kmer
 	var buf kmr.Kmer
