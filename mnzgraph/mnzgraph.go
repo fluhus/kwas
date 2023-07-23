@@ -26,6 +26,10 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+const (
+	assertSamplesSorted = false // For debugging
+)
+
 var (
 	input    = flag.String("i", "", "Input file glob pattern")
 	output   = flag.String("o", "", "Output file")
@@ -172,7 +176,7 @@ func main() {
 }
 
 // Loads kmers from a HAS file.
-func loadKmers(file string) ([]*kmr.HasTuple, error) {
+func loadKmers(file string, pt *progress.Timer) ([]*kmr.HasTuple, error) {
 	f, err := aio.Open(file)
 	if err != nil {
 		return nil, err
@@ -186,7 +190,18 @@ func loadKmers(file string) ([]*kmr.HasTuple, error) {
 		if err != nil {
 			break
 		}
+		if assertSamplesSorted {
+			for i := range tup.Data.Samples[1:] {
+				if tup.Data.Samples[i] >= tup.Data.Samples[i+1] {
+					return nil, fmt.Errorf(
+						"kmer #%d: samples[%d] >= samples[%d]: %d >= %d",
+						len(result), i, i+1,
+						tup.Data.Samples[i], tup.Data.Samples[i+1])
+				}
+			}
+		}
 		result = append(result, tup)
+		pt.Inc()
 	}
 	if err != io.EOF {
 		return nil, err
@@ -207,12 +222,11 @@ func loadKmersGlob(file string) ([]*kmr.HasTuple, error) {
 	var result []*kmr.HasTuple
 	pt := progress.NewTimer()
 	for _, f := range files {
-		tups, err := loadKmers(f)
+		tups, err := loadKmers(f, pt)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, tups...)
-		pt.Inc()
 	}
 	pt.Done()
 	return result, nil
