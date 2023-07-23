@@ -17,13 +17,11 @@ import (
 var (
 	p   = flag.Int("p", 1, "Sample part number")
 	np  = flag.Int("np", 1, "Number of sample parts")
+	k   = flag.Int("k", 1, "Kmer part number")
+	nk  = flag.Int("nk", 1, "Number of kmer parts")
 	out = flag.String("o", "", "Output file")
 	ff  = flag.String("f", "", "File with input files "+
 		"(if omitted, inupt files are expected as arguments)")
-
-	// Ignored for now.
-	k  = flag.Int("k", 1, "Kmer part number")
-	nk = flag.Int("nk", 1, "Number of kmer parts")
 )
 
 func main() {
@@ -71,6 +69,11 @@ func main() {
 				continue
 			}
 			err := s.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
+				if *nk != 1 {
+					if util.Hash64(kmer[:])%uint64(*nk) != uint64(*k-1) {
+						return nil
+					}
+				}
 				counts[kmer]++
 				return nil
 			})
