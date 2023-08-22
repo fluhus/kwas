@@ -7,27 +7,33 @@ import (
 	"io/fs"
 	"math"
 	"path/filepath"
-	"runtime"
-	"sort"
-	"strings"
+	"sync"
 
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/gnum"
 	"github.com/fluhus/gostuff/jio"
+	"github.com/fluhus/gostuff/minhash"
 	"github.com/fluhus/gostuff/ppln"
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/snm"
 	"github.com/fluhus/kwas/graphs"
 	"github.com/fluhus/kwas/kmr"
-	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
+	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/slices"
 )
 
 const (
-	assertSamplesSorted = false // For debugging
+	assertSamplesSorted = false // For debugging.
+
+	indexK       = 50
+	indexSearchK = 37
+
+	// For int-hashing.
+	prime uint64 = 10089886811898868001
+	mask  uint64 = 7544360184296396679
 )
 
 var (
@@ -41,67 +47,59 @@ var (
 func main() {
 	flag.Parse()
 
-	fmt.Println("Threads:", *nt)
-
 	kmers, err := loadKmersGlob(*input)
 	util.Die(err)
-	fmt.Println(len(kmers), "kmers")
-	runtime.GC()
 
-	type istring struct {
-		i int
-		s string
-	}
+	var mhs [][]uint64
+	var idx mhindex
 
-	var expanded []istring
-	for i, kmer := range kmers {
-		e := string(sequtil.DNAFrom2Bit(nil, kmer.Kmer[:])[:kmr.K])
-		expanded = append(expanded, istring{i, e})
-		expanded = append(expanded, istring{i, sequtil.ReverseComplementString(e)})
-	}
-	sort.Slice(expanded, func(i, j int) bool {
-		return expanded[i].s < expanded[j].s
-	})
+	pt := ptimer.NewMessasge("{} kmers indexed")
+	idx = mhindex{}
+	ppln.Serial[int, []uint64](*nt,
+		func(push func(int), stop func() bool) error {
+			for i := range kmers {
+				push(i)
+			}
+			return nil
+		},
+		func(a, i, g int) ([]uint64, error) {
+			return intsMinHash(kmers[a].Data.Samples, indexK), nil
+		},
+		func(mh []uint64) error {
+			mhs = append(mhs, slices.Clone(mh))
+			idx.add(pt.N, mh)
+			pt.Inc()
+			return nil
+		})
+	pt.Done()
 
 	graph := graphs.New(len(kmers))
-	pt := ptimer.NewMessasge(fmt.Sprint("{} out of ", len(expanded)))
+	pt = ptimer.NewMessasge("{} kmers done")
+	ptl := &sync.Mutex{}
 
-	ppln.NonSerial(*nt,
-		func(push func(istring), _ func() bool) error {
-			for _, e := range expanded {
-				push(e)
-				pt.Inc()
+	ppln.NonSerial[int, [2]int](*nt,
+		func(push func(int), stop func() bool) error {
+			for i := range kmers {
+				push(i)
 			}
 			return nil
 		},
-		func(e istring, push func([2]int), g int) error {
+		func(a int, push func([2]int), g int) error {
 			const thr = 0.05
-			const n = kmr.K / 2
-			ei := e.i
-			for p := 1; p <= n; p++ {
-				ep := e.s[p:]
-				s := sort.Search(len(expanded), func(i int) bool {
-					return expanded[i].s >= ep
-				})
-				for ; s < len(expanded) && strings.HasPrefix(expanded[s].s, ep); s++ {
-					es := expanded[s]
-					si := es.i
-					if e.i == es.i {
-						continue
-					}
-					if util.JaccardDualDist(kmers[ei].Data.Samples,
-						kmers[si].Data.Samples, *nSamples) < thr {
-						push([2]int{ei, si})
-					}
+			for _, i := range idx.search(a, mhs[a], indexSearchK) {
+				if util.JaccardDualDist(kmers[a].Data.Samples,
+					kmers[i].Data.Samples, *nSamples) < thr {
+					push([2]int{a, i})
 				}
 			}
+			ptl.Lock()
+			pt.Inc()
+			ptl.Unlock()
 			return nil
-		},
-		func(a [2]int) error {
+		}, func(a [2]int) error {
 			graph.AddEdge(a[0], a[1])
 			return nil
-		},
-	)
+		})
 	pt.Done()
 	fmt.Println(graph.NumEdges(), "edges (pairs that are close enough)")
 
@@ -123,9 +121,8 @@ func main() {
 	}
 	fmt.Println("Component size quantiles:", util.NTiles(20, lens))
 
-	fmt.Println("Finding centers")
 	centers := make([]*kmr.HasTuple, 0, len(comps))
-	pt = ptimer.New()
+	pt = ptimer.NewMessasge("{} centers calculated")
 	ppln.Serial(*nt,
 		func(push func([]int), _ func() bool) error {
 			for _, comp := range comps {
@@ -144,7 +141,6 @@ func main() {
 		},
 	)
 	pt.Done()
-	fmt.Println(len(centers), "centers")
 
 	fmt.Println("Saving centers")
 	fout, err := aio.Create(*output)
@@ -176,7 +172,7 @@ func main() {
 }
 
 // Loads kmers from a HAS file.
-func loadKmers(file string, pt *progress.Timer) ([]*kmr.HasTuple, error) {
+func loadKmers(file string, pt *ptimer.Timer) ([]*kmr.HasTuple, error) {
 	f, err := aio.Open(file)
 	if err != nil {
 		return nil, err
@@ -189,6 +185,10 @@ func loadKmers(file string, pt *progress.Timer) ([]*kmr.HasTuple, error) {
 		err = tup.Decode(f)
 		if err != nil {
 			break
+		}
+		if len(tup.Data.Samples) > *nSamples {
+			return nil, fmt.Errorf("kmer has %d samples but #samples (-n) is %d",
+				len(tup.Data.Samples), *nSamples)
 		}
 		if assertSamplesSorted {
 			for i := range tup.Data.Samples[1:] {
@@ -220,7 +220,7 @@ func loadKmersGlob(file string) ([]*kmr.HasTuple, error) {
 	}
 	fmt.Println("Reading kmers from", len(files), "files")
 	var result []*kmr.HasTuple
-	pt := progress.NewTimer()
+	pt := ptimer.NewMessasge("{} kmers loaded")
 	for _, f := range files {
 		tups, err := loadKmers(f, pt)
 		if err != nil {
@@ -248,4 +248,49 @@ func sqDistances(kmers []*kmr.HasTuple) []float64 {
 		result[i] = math.Sqrt(result[i])
 	}
 	return result
+}
+
+// Min-hash index, for quick set lookup.
+type mhindex map[uint64][]int
+
+// Adds the given min-hashes and associates them with the given ID i.
+func (m mhindex) add(i int, mh []uint64) {
+	for _, h := range mh {
+		m[h] = append(m[h], i)
+	}
+}
+
+// Searches for ID's that share at least min min-hashes with i.
+func (m mhindex) search(i int, mh []uint64, min int) []int {
+	// TODO(amit): make the min = min(min, len)
+	cnt := map[int]int{}
+	for _, h := range mh {
+		for _, ii := range m[h] {
+			if ii <= i { // Avoid pair repetition and self.
+				continue
+			}
+			cnt[ii]++
+		}
+	}
+	var result []int
+	for k, v := range cnt {
+		if v >= min {
+			result = append(result, k)
+		}
+	}
+	return result
+}
+
+// Returns the k min-hashes for the ints in a.
+func intsMinHash(a []int, k int) []uint64 {
+	mh := minhash.New[uint64](k)
+	for _, i := range a {
+		mh.Push(intHash(i))
+	}
+	return mh.View()
+}
+
+// Hashes an integer.
+func intHash[I constraints.Integer](i I) uint64 {
+	return (uint64(i) * prime) ^ mask
 }
