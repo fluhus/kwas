@@ -35,7 +35,7 @@ func (r *reader) Close() error {
 	return nil
 }
 
-func runKMC2(fq string, opts ...Option) (io.ReadCloser, error) {
+func runKMC(fq string, opts ...Option) (io.ReadCloser, error) {
 	dir, err := os.MkdirTemp("", "kmc_")
 	if err != nil {
 		return nil, err
@@ -88,8 +88,8 @@ func runKMC2(fq string, opts ...Option) (io.ReadCloser, error) {
 	return result, nil
 }
 
-func KMC2(forEach func(kmer []byte, count int), fq string, opts ...Option) error {
-	r, err := runKMC2(fq, opts...)
+func KMC(forEach func(kmer []byte, count int), fq string, opts ...Option) error {
+	r, err := runKMC(fq, opts...)
 	if err != nil {
 		return err
 	}

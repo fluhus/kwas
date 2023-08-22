@@ -26,11 +26,11 @@ var (
 func main() {
 	flag.Parse()
 
-	fmt.Printf("Reading kmers (K=%d\n)", kmr.K)
+	fmt.Printf("Reading kmers (K=%d)\n", kmr.K)
 	pt := ptimer.New()
 	var kmers []kmr.Kmer
 	var buf kmr.Kmer
-	err := kmc.KMC2(func(kmer []byte, count int) {
+	err := kmc.KMC(func(kmer []byte, count int) {
 		sequtil.DNATo2Bit(buf[:0], kmer)
 		kmers = append(kmers, buf)
 	}, *inFile, kmc.OptionK(kmr.K), kmc.OptionThreads(2))
