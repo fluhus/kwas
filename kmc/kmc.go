@@ -35,16 +35,30 @@ func (r *reader) Close() error {
 	return nil
 }
 
-func runKMC(fq string, k int) (io.ReadCloser, error) {
+func runKMC2(fq string, opts ...Option) (io.ReadCloser, error) {
 	dir, err := os.MkdirTemp("", "kmc_")
 	if err != nil {
 		return nil, err
 	}
 	stderr1 := bytes.NewBuffer(nil)
-	cmd1 := exec.Command(exePath,
-		"-v",
-		fmt.Sprintf("-k%v", k),
-		"-t2", fq, filepath.Join(dir, "a"), dir)
+
+	// Allow overriding default params.
+	paramMap := map[string]string{
+		"v": "-v",
+		"t": "-t2",
+	}
+	for _, opt := range opts {
+		paramMap[opt.key] = opt.param
+	}
+	var params []string
+	for _, p := range paramMap {
+		if p == "" {
+			continue
+		}
+		params = append(params, p)
+	}
+	params = append(params, fq, filepath.Join(dir, "a"), dir)
+	cmd1 := exec.Command(exePath, params...)
 	cmd1.Stdout = stderr1
 	cmd1.Stderr = stderr1
 
@@ -74,11 +88,8 @@ func runKMC(fq string, k int) (io.ReadCloser, error) {
 	return result, nil
 }
 
-// KMC runs KMC.
-//
-// Deprecated: use KMC2.
-func KMC(fq string, k int, forEach func(kmer []byte, count int)) error {
-	r, err := runKMC(fq, k)
+func KMC2(forEach func(kmer []byte, count int), fq string, opts ...Option) error {
+	r, err := runKMC2(fq, opts...)
 	if err != nil {
 		return err
 	}
@@ -98,4 +109,28 @@ func KMC(fq string, k int, forEach func(kmer []byte, count int)) error {
 		forEach(parts[0], count)
 	}
 	return sc.Err()
+}
+
+type Option struct {
+	key, param string
+}
+
+func OptionK(k int) Option {
+	return Option{"k", fmt.Sprint("-k", k)}
+}
+
+func OptionMin(n int) Option {
+	return Option{"ci", fmt.Sprint("-ci", n)}
+}
+
+func OptionFasta() Option {
+	return Option{"f", "-fm"}
+}
+
+func OptionThreads(n int) Option {
+	return Option{"t", fmt.Sprint("-t", n)}
+}
+
+func OptionMaxCount(n int) Option {
+	return Option{"cs", fmt.Sprint("-cs", n)}
 }
