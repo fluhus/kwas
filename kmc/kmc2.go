@@ -108,3 +108,7 @@ func OptionFasta() Option {
 func OptionThreads(n int) Option {
 	return Option{"t", fmt.Sprint("-t", n)}
 }
+
+func OptionMaxCount(n int) Option {
+	return Option{"cs", fmt.Sprint("-cs", n)}
+}
