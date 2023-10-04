@@ -2,77 +2,181 @@
 package main
 
 import (
+	"bufio"
 	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/kwas/util"
-	"golang.org/x/exp/slices"
 )
 
 var (
-	thr    = flag.Float64("p", 0, "P-value threshold")
-	fin    = flag.String("i", "", "Input file")
-	fout   = flag.String("o", "", "Output file")
-	invert = flag.Bool("n", false,
-		"Invert, retain only results with p-values above the threshold")
+	fin = flag.String("i", "", "Input files glob")
+	// fout   = flag.String("o", "", "Output file")
+	// invert = flag.Bool("n", false,
+	// 	"Invert, retain only results with p-values above the threshold")
+	fsig  = flag.String("s", "", "Significant kmers output file")
+	fnsig = flag.String("n", "", "Non-significant kmers output file")
 )
 
 func main() {
 	flag.Parse()
-
-	fmt.Fprintln(os.Stderr, "Starting")
-	fmt.Fprintln(os.Stderr, "Pval threshold:", *thr)
-
-	fi, err := aio.Open(*fin)
-	util.Die(err)
-	r := csv.NewReader(fi)
-	head, err := r.Read()
+	files, err := filepath.Glob(*fin)
 	util.Die(err)
 
-	ip := slices.Index(head, "has_pval")
+	fmt.Println("Counting kmers")
+	n, err := countLinesFiles(files)
+	util.Die(err)
+	fmt.Println("Found", n, "kmers")
+	pval := 0.05 / float64(n)
+	fmt.Println("P-value significance threshold:", pval)
+
+	fmt.Println("Filtering kmers")
+	fs, err := aio.Create(*fsig)
+	util.Die(err)
+	fn, err := aio.Create(*fnsig)
+	util.Die(err)
+	util.Die(filterByPvalFiles(files, pval, fs, fn))
+	fs.Close()
+	fn.Close()
+}
+
+// Writes a CSV (including a header) to out, with the lines where kmer p-value
+// is at most maxPval.
+func filterByPvalFiles(files []string, maxPval float64,
+	outSig, outNSig io.Writer) error {
+	header, err := readHeader(files[0])
+	if err != nil {
+		return err
+	}
+	ip := slices.Index(header, "kmer_pval")
 	if ip == -1 {
-		util.Die(fmt.Errorf("did not find has_pval"))
+		util.Die(fmt.Errorf("did not find kmer_pval column"))
 	}
 
-	fo, err := aio.Create(*fout)
-	util.Die(err)
-	w := csv.NewWriter(fo)
-	w.Write(head)
+	ws := csv.NewWriter(outSig)
+	wn := csv.NewWriter(outNSig)
+	if err := ws.Write(header); err != nil {
+		return err
+	}
+	if err := wn.Write(header); err != nil {
+		return err
+	}
 
-	sig := 0
-	var pvals []float64
+	all, wrote := 0, 0
+	pt := ptimer.NewFunc(func(i int) string {
+		return fmt.Sprintf("%d/%d files done (%.1f%% significant)",
+			i, len(files), util.Perc(wrote, all))
+	})
+	for _, f := range files {
+		if err := iterCSV(f, header, func(row []string) error {
+			pval, err := strconv.ParseFloat(row[ip], 64)
+			if err != nil {
+				return err
+			}
+			if pval <= maxPval {
+				if err := ws.Write(row); err != nil {
+					return err
+				}
+				wrote++
+			} else {
+				if err := wn.Write(row); err != nil {
+					return err
+				}
+			}
+			all++
+			return nil
+		}); err != nil {
+			return err
+		}
+		pt.Inc()
+	}
+	ws.Flush()
+	wn.Flush()
+	pt.Done()
+	return nil
+}
+
+// Returns the header of the given CSV file.
+func readHeader(file string) ([]string, error) {
+	f, err := aio.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return csv.NewReader(f).Read()
+}
+
+// Calls forEach for each line in a CSV file.
+// If the file's header does not match the given header, returns an error.
+func iterCSV(file string, header []string, forEach func([]string) error) error {
+	f, err := aio.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Check that header matches.
+	r := csv.NewReader(f)
+	h, err := r.Read()
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(h, header) {
+		return fmt.Errorf("mismatching headers: %v %v", h, header)
+	}
+
 	var row []string
 	for row, err = r.Read(); err == nil; row, err = r.Read() {
-		pval, err := strconv.ParseFloat(row[ip], 64)
-		util.Die(err)
-		pvals = append(pvals, pval)
-		if (!*invert && pval <= *thr) || (*invert && pval > *thr) {
-			util.Die(w.Write(row))
-			sig++
+		if err := forEach(row); err != nil {
+			return err
 		}
 	}
 	if err != io.EOF {
-		util.Die(err)
+		return err
 	}
-	w.Flush()
-	util.Die(w.Error())
-	util.Die(fo.Close())
-	fmt.Fprintln(os.Stderr, "Read", len(pvals), "rows")
+	return nil
+}
 
-	slices.Sort(pvals)
-	ip, _ = slices.BinarySearch(pvals, *thr)
-	fmt.Fprintln(os.Stderr, ip, "significant",
-		util.Percf(ip, len(pvals), 0))
-
-	nt := util.NTiles(10, pvals)
-	for _, n := range nt {
-		fmt.Fprintf(os.Stderr, "%.2g ", n)
+// Counts the lines in the given files, minus the headers.
+func countLinesFiles(files []string) (int, error) {
+	pt := ptimer.NewMessasge(fmt.Sprintf("{}/%d files done", len(files)))
+	n := 0
+	for _, f := range files {
+		nf, err := countLines(f)
+		if err != nil {
+			return 0, err
+		}
+		if nf == 0 {
+			return 0, fmt.Errorf("found 0 lines in: %s", f)
+		}
+		n += nf - 1
+		pt.Inc()
 	}
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Done")
+	pt.Done()
+	return n, nil
+}
+
+// Counts lines in a single file.
+func countLines(file string) (int, error) {
+	f, err := aio.Open(file)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	n := 0
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		n++
+	}
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
