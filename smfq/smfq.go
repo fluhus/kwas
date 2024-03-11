@@ -3,42 +3,40 @@ package main
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"iter"
 	"regexp"
-	"runtime"
-	"strings"
+	"runtime/debug"
 
-	"github.com/fluhus/biostuff/formats/fastq"
+	"github.com/fluhus/biostuff/formats/bioiter/v2"
 	"github.com/fluhus/biostuff/formats/sam"
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
-	"github.com/fluhus/gostuff/ppln"
+	"github.com/fluhus/gostuff/ppln/v2"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/kmr"
-	"github.com/fluhus/kwas/progress"
+	"github.com/fluhus/gostuff/snm"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
-)
-
-const (
-	kmerIterGC = false // Run GC occasionally when loading kmers.
 )
 
 var (
-	fqFile    = flag.String("f", "", "Fastq file `path`")
-	samFile   = flag.String("s", "", "SAM file `path`")
+	samFile   = flag.String("i", "", "Input file `path` (sam or diamond)")
 	kmersFile = flag.String("k", "", "Kmers file `path`")
 	outFile   = flag.String("o", "", "Output file `path`")
 	nameRE    = flag.String("x", "", "Name `regex` to capture")
 	nThreads  = flag.Int("t", 1, "Number of threads")
+	isDiamond = flag.Bool("d", false, "Input is a diamond file")
 )
 
 func main() {
+	debug.SetGCPercent(33)
 	flag.Parse()
 
 	var re *regexp.Regexp
@@ -48,163 +46,96 @@ func main() {
 		util.Die(err)
 	}
 
-	genes := map[string]int{}
-	geneSets := map[string]sets.Set[int]{}
-	var wl map[kmert]int
-
-	kit, err := newKmerIter(*kmersFile)
-	util.Die(err)
+	geneSets := snm.NewDefaultMap(func(s string) sets.Set[int] {
+		return sets.Set[int]{}
+	})
 
 	const nk = 25000000 // Batch size.
 
-	for wl, err = kit.next(nk); err == nil; wl, err = kit.next(nk) {
-		if *fqFile != "" {
-			// For diamond files that don't include the query sequence.
-			fmt.Println("Reading fastq and sam")
-			ff, err := aio.Open(*fqFile)
-			util.Die(err)
-			fs, err := aio.Open(*samFile)
-			util.Die(err)
-
-			rf, rs := fastq.NewReader(ff), sam.NewReader(fs)
-			pt := progress.NewTimerFunc(func(i int) string {
-				return fmt.Sprint(i, " reads, ", len(genes), " genes")
+	round := 0
+	for wl, err := range iterKmersBatch(*kmersFile, nk) {
+		util.Die(err)
+		round++
+		if *isDiamond {
+			fmt.Printf("Reading input (round %d)\n", round)
+			pt := ptimer.NewFunc(func(i int) string {
+				return fmt.Sprint(i, " reads")
 			})
-			type fqsm struct {
-				fq *fastq.Fastq
-				sm *sam.SAM
-			}
 			type geneidx struct {
 				gene string
 				idx  int
 			}
 			err = ppln.NonSerial(*nThreads,
-				func(push func(a fqsm), stop func() bool) error {
-					for {
-						if stop() {
-							break
-						}
-						fq, ef := rf.Read()
-						sm, es := rs.Read()
-						if ef != nil || es != nil {
-							if ef == io.EOF && es == io.EOF {
-								break
-							}
-							if err := util.NotExpectingEOF(ef); err != nil {
-								return err
-							}
-							if err := util.NotExpectingEOF(es); err != nil {
-								return err
-							}
-						}
-						if !strings.HasPrefix(string(fq.Name), sm.Qname) {
-							return fmt.Errorf("mismatching names: %q, %q",
-								fq.Name, sm.Qname)
-						}
-						push(fqsm{fq, sm})
-						pt.Inc()
-					}
-					return nil
-				},
-				func(a fqsm, push func(geneidx), g int) error {
-					if a.sm.Rname == "*" {
-						return nil
-					}
+				iterDiamondFile(*samFile),
+				func(a diamondLine, g int) ([]geneidx, error) {
 					if re != nil {
-						mch := re.FindString(a.sm.Rname)
+						mch := re.FindString(a.rid)
 						if mch == "" {
-							return fmt.Errorf(
+							return nil, fmt.Errorf(
 								"rname %q does not match name pattern %v",
-								a.sm.Rname, re)
+								a.rid, re)
 						}
-						a.sm.Rname = mch
+						a.rid = mch
 					}
-					seq := a.fq.Sequence
+					seq := []byte(a.qseq)
+					var result []geneidx
 					for i := range seq[kmr.K-1:] {
 						kmer := seq[i : i+kmr.K]
 						if idx, ok := wl[*(*kmert)(kmer)]; ok {
-							push(geneidx{a.sm.Rname, idx})
+							result = append(result, geneidx{a.rid, idx})
 						}
 					}
-					return nil
+					return result, nil
 				},
-				func(a geneidx) error {
-					s, ok := geneSets[a.gene]
-					if !ok {
-						s = sets.Set[int]{}
-						geneSets[a.gene] = s
+				func(a []geneidx) error {
+					for _, gi := range a {
+						geneSets.Get(gi.gene).Add(gi.idx)
 					}
-					s.Add(a.idx)
+					pt.Inc()
 					return nil
 				},
 			)
 			util.Die(err)
 			pt.Done()
 		} else {
-			// For bowtie files that do include the query sequence.
-			fmt.Println("Reading sam")
-			fs, err := aio.Open(*samFile)
-			util.Die(err)
-
-			rs := sam.NewReader(fs)
-			pt := progress.NewTimerFunc(func(i int) string {
-				return fmt.Sprint(i, " reads, ", len(genes), " genes")
+			fmt.Printf("Reading input (round %d)\n", round)
+			pt := ptimer.NewFunc(func(i int) string {
+				return fmt.Sprint(i, " reads")
 			})
-			type fqsm struct {
-				fq *fastq.Fastq
-				sm *sam.SAM
-			}
 			type geneidx struct {
 				gene string
 				idx  int
 			}
 			err = ppln.NonSerial(*nThreads,
-				func(push func(a fqsm), stop func() bool) error {
-					for {
-						if stop() {
-							break
-						}
-						sm, err := rs.Read()
-						if err != nil {
-							if err == io.EOF {
-								break
-							}
-							return err
-						}
-						push(fqsm{nil, sm})
-						pt.Inc()
-					}
-					return nil
-				},
-				func(a fqsm, push func(geneidx), g int) error {
-					if a.sm.Rname == "*" || a.sm.Mapq < 30 {
-						return nil
+				bioiter.SAM(*samFile),
+				func(sm *sam.SAM, g int) ([]geneidx, error) {
+					if sm.Rname == "*" || sm.Mapq < 30 {
+						return nil, nil
 					}
 					if re != nil {
-						mch := re.FindString(a.sm.Rname)
+						mch := re.FindString(sm.Rname)
 						if mch == "" {
-							return fmt.Errorf(
+							return nil, fmt.Errorf(
 								"rname %q does not match name pattern %v",
-								a.sm.Rname, re)
+								sm.Rname, re)
 						}
-						a.sm.Rname = mch
+						sm.Rname = mch
 					}
-					seq := []byte(a.sm.Seq)
+					seq := []byte(sm.Seq)
+					var result []geneidx
 					for i := range seq[kmr.K-1:] {
 						kmer := seq[i : i+kmr.K]
 						if idx, ok := wl[*(*kmert)(kmer)]; ok {
-							push(geneidx{a.sm.Rname, idx})
+							result = append(result, geneidx{sm.Rname, idx})
 						}
 					}
-					return nil
+					return result, nil
 				},
-				func(a geneidx) error {
-					s, ok := geneSets[a.gene]
-					if !ok {
-						s = sets.Set[int]{}
-						geneSets[a.gene] = s
+				func(a []geneidx) error {
+					for _, ig := range a {
+						geneSets.Get(ig.gene).Add(ig.idx)
 					}
-					s.Add(a.idx)
+					pt.Inc()
 					return nil
 				},
 			)
@@ -212,19 +143,15 @@ func main() {
 			pt.Done()
 		}
 	}
-	if err != io.EOF {
-		util.Die(err)
-	}
+	fmt.Println("Mapped to", len(geneSets.M), "groups")
 	fout, err := aio.Create(*outFile)
 	util.Die(err)
 	enc := json.NewEncoder(fout)
-	keys := maps.Keys(geneSets)
-	slices.Sort(keys)
-	for _, k := range keys {
+	for _, k := range sortedKeys(geneSets.M) {
 		j := struct {
 			Gene  string
 			Kmers []int
-		}{k, sortSet(geneSets[k])}
+		}{k, sortedKeys(geneSets.Get(k))}
 		util.Die(enc.Encode(j))
 	}
 	fout.Close()
@@ -240,51 +167,76 @@ func (k kmert) MarshalText() ([]byte, error) {
 	return k[:], nil
 }
 
-type kmerIter struct {
-	r io.ReadCloser
-	s *bufio.Scanner
-	i int
-}
-
-func newKmerIter(file string) (*kmerIter, error) {
-	f, err := aio.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	return &kmerIter{f, bufio.NewScanner(f), 0}, nil
-}
-
-func (k *kmerIter) next(n int) (map[kmert]int, error) {
-	if kmerIterGC {
-		runtime.GC()
-	}
-	m := map[kmert]int{}
-	for i := 0; i < n; i++ {
-		if !k.s.Scan() {
-			break
+func iterKmersBatch(file string, n int) iter.Seq2[map[kmert]int, error] {
+	return func(yield func(map[kmert]int, error) bool) {
+		f, err := aio.Open(file)
+		if err != nil {
+			yield(nil, err)
+			return
 		}
-		m[*(*kmert)(k.s.Bytes())] = k.i
-		rc := sequtil.ReverseComplement(nil, k.s.Bytes()[:kmr.K])
-		m[*(*kmert)(rc)] = k.i
-		if kmerIterGC && i == n/2 {
-			runtime.GC()
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		i := 0
+		for {
+			m := make(map[kmert]int, n*2)
+			for range n {
+				if !sc.Scan() {
+					break
+				}
+				m[kmert(sc.Bytes())] = i
+				rc := sequtil.ReverseComplement(nil, sc.Bytes()[:kmr.K])
+				m[kmert(rc)] = i
+				i++
+			}
+			if sc.Err() != nil {
+				yield(nil, sc.Err())
+				return
+			}
+			if len(m) == 0 {
+				return
+			}
+			if !yield(m, nil) {
+				return
+			}
 		}
-		k.i++
 	}
-	if k.s.Err() != nil {
-		return nil, k.s.Err()
-	}
-	if len(m) == 0 {
-		return nil, io.EOF
-	}
-	if kmerIterGC {
-		runtime.GC()
-	}
-	return m, nil
 }
 
-func sortSet[T constraints.Ordered](s sets.Set[T]) []T {
-	k := maps.Keys(s)
-	slices.Sort(k)
-	return k
+func sortedKeys[K constraints.Ordered, V any](m map[K]V) []K {
+	return snm.Sorted(maps.Keys(m))
+}
+
+type diamondLine struct {
+	qid, rid, qseq string
+}
+
+func iterDiamondFile(file string) iter.Seq2[diamondLine, error] {
+	return func(yield func(diamondLine, error) bool) {
+		f, err := aio.Open(file)
+		if err != nil {
+			yield(diamondLine{}, err)
+			return
+		}
+		defer f.Close()
+		r := csv.NewReader(f)
+		r.Comma = '\t'
+		r.Comment = '#'
+		for {
+			line, err := r.Read()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				yield(diamondLine{}, err)
+				return
+			}
+			if len(line) != 3 {
+				yield(diamondLine{}, fmt.Errorf("bad number of fields in: %v", line))
+				return
+			}
+			if !yield(diamondLine{line[0], line[1], line[2]}, nil) {
+				return
+			}
+		}
+	}
 }
