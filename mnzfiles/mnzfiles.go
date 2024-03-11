@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/snm"
 	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -45,8 +46,8 @@ func main() {
 	fmt.Println("Sorting")
 	t := time.Now()
 	names := maps.Keys(sizes)
-	slices.SortFunc(names, func(a, b string) bool {
-		return sizes[a] > sizes[b]
+	slices.SortFunc(names, func(a, b string) int {
+		return snm.Compare(sizes[b], sizes[a])
 	})
 	fmt.Println("Took", time.Since(t))
 
