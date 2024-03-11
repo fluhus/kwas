@@ -9,7 +9,7 @@ import (
 	"sort"
 
 	"github.com/fluhus/gostuff/aio"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
 )
 
@@ -38,10 +38,11 @@ func main() {
 
 	switch *typ {
 	case "cnt":
-		err = merge(files, &kmr.CountTuple{})
+		err = merge[kmr.CountHandler](files)
 	case "has":
-		// Sort on encode for compression.
-		err = merge(files, &kmr.HasTuple{Data: kmr.KmerHas{SortOnEncode: true}})
+		err = merge[kmr.HasHandler](files)
+	case "prf":
+		err = merge[kmr.ProfileHandler](files)
 	default:
 		err = fmt.Errorf("unsupported type: %q", *typ)
 	}
@@ -59,15 +60,10 @@ func main() {
 }
 
 // Merges the given files using the given zero tuple.
-func merge[T any, H kmr.KmerDataHandler[T]](
-	files []string, zero *kmr.Tuple[T, H]) error {
-	m := kmr.NewMerger1(zero)
+func merge[H kmr.KmerDataHandler[T], T any](files []string) error {
+	m := kmr.NewMerger[H]()
 	for _, file := range files {
-		f, err := aio.Open(file)
-		if err != nil {
-			return err
-		}
-		if err := m.Add(f); err != nil {
+		if err := m.Add(kmr.IterTuplesFile[H](file)); err != nil {
 			return err
 		}
 	}
@@ -89,6 +85,5 @@ func parseArgs() error {
 	if *out == "" {
 		return fmt.Errorf("empty output path")
 	}
-	// TODO(amit): Validate the typ argument.
 	return nil
 }
