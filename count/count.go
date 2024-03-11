@@ -4,12 +4,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/ptimer"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/iterx"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/slices"
 )
@@ -23,6 +23,8 @@ var (
 	ff  = flag.String("f", "", "File with input files "+
 		"(if omitted, inupt files are expected as arguments)")
 )
+
+// TODO(amit): Make input file a glob pattern?
 
 func main() {
 	flag.Parse()
@@ -42,11 +44,9 @@ func main() {
 	fmt.Println("Found", len(files), "files to count")
 
 	fmt.Println("Opening files")
-	var streams []*util.Unreader[kmr.Kmer]
+	var streams []*iterx.Iter[kmr.Kmer]
 	for _, file := range files {
-		s, err := newUnreader(file)
-		util.Die(err)
-		streams = append(streams, s)
+		streams = append(streams, iterx.New(kmr.IterKmersFile(file)))
 	}
 
 	fout, err := aio.Create(*out)
@@ -57,39 +57,34 @@ func main() {
 	checkpoints := kmr.Checkpoints(1000)
 
 	fmt.Println("Counting")
-	pt := ptimer.NewMessasge("{} kmers")
+	pt := ptimer.NewMessage("{} kmers")
 
 	for icp, cp := range checkpoints {
 		counts := map[kmr.Kmer]int{}
 		if pt.N > 0 {
 			counts = make(map[kmr.Kmer]int, pt.N*3/icp/2)
 		}
-		for i, s := range streams {
+		for _, s := range streams {
 			if s == nil {
 				continue
 			}
-			err := s.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
+			for kmer, err := range s.Until(cp.Less) {
+				util.Die(err)
 				if *nk != 1 {
 					if util.Hash64(kmer[:])%uint64(*nk) != uint64(*k-1) {
-						return nil
+						continue
 					}
 				}
 				counts[kmer]++
-				return nil
-			})
-			if err == io.EOF {
-				streams[i] = nil
-				continue
 			}
-			util.Die(err)
 		}
 		tuples := make([]kmr.CountTuple, 0, len(counts))
 		for k, v := range counts {
 			tuples = append(tuples,
-				kmr.CountTuple{Kmer: k, Data: kmr.KmerCount{Count: v}})
+				kmr.CountTuple{Kmer: k, Data: kmr.CountData{Count: v}})
 		}
-		slices.SortFunc(tuples, func(a, b kmr.CountTuple) bool {
-			return a.Kmer.Less(b.Kmer)
+		slices.SortFunc(tuples, func(a, b kmr.CountTuple) int {
+			return a.Kmer.Compare(b.Kmer)
 		})
 		for _, t := range tuples {
 			t.Encode(wout)
@@ -100,14 +95,4 @@ func main() {
 	pt.Done()
 
 	fmt.Println("Done")
-}
-
-func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {
-	// TODO(amit): Close input file.
-	f, err := aio.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	r := kmr.NewReader(f)
-	return util.NewUnreader(r.Read), nil
 }
