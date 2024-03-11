@@ -13,7 +13,7 @@ import (
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/ptimer"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/lazy"
 	"github.com/fluhus/kwas/util"
 )
