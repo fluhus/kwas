@@ -50,6 +50,18 @@ func (m *Merger[T]) Add(next func() (T, error)) error {
 	return nil
 }
 
+func (m *Merger[T]) AddSlice(s []T) {
+	i := 0
+	m.Add(func() (T, error) {
+		if i >= len(s) {
+			var t T
+			return t, io.EOF
+		}
+		i++
+		return s[i-1], nil
+	})
+}
+
 // Next returns a merged T from the next group of key-equal elements.
 func (m *Merger[T]) Next() (T, error) {
 	if m.h.Len() == 0 {

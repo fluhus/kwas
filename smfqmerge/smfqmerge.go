@@ -6,15 +6,16 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/fluhus/gostuff/aio"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/sets"
 	"github.com/fluhus/kwas/gmerge"
-	"github.com/fluhus/kwas/progress"
 	"github.com/fluhus/kwas/util"
 )
 
@@ -23,6 +24,7 @@ var (
 	outFile = flag.String("o", "", "Output file")
 	part    = flag.Int("p", 1, "1-based part number")
 	nparts  = flag.Int("np", 1, "Total number of parts")
+	del     = flag.Bool("d", false, "Delete input files")
 )
 
 func main() {
@@ -37,19 +39,26 @@ func main() {
 		util.Die(fmt.Errorf("found 0 files"))
 	}
 	fmt.Println("Found", len(inFiles), "files")
+
+	if *part != 1 || *nparts != 1 {
+		fmt.Printf("Part %d/%d\n", *part, *nparts)
+	}
 	sort.Strings(inFiles)
 	inFiles, _ = util.ChooseStrings(inFiles, *part-1, *nparts)
-	fmt.Println("Working on", len(inFiles))
+	fmt.Println("Found", len(inFiles), "input files")
 	time.Sleep(time.Second)
 
 	m := gmerge.NewMerger(
-		func(r gkReader) (geneKmers, error) {
-			return r.next()
-		}, func(gk1, gk2 geneKmers) geneKmers {
-			gk1.Kmers.AddSet(gk2.Kmers)
-			return gk1
-		}, func(gk1, gk2 geneKmers) int {
+		func(gk1, gk2 geneKmers) int {
 			return strings.Compare(gk1.Gene, gk2.Gene)
+		},
+		func(gk1, gk2 geneKmers) geneKmers {
+			if len(gk1.Kmers) > len(gk2.Kmers) {
+				gk1.Kmers.AddSet(gk2.Kmers)
+				return gk1
+			}
+			gk2.Kmers.AddSet(gk1.Kmers)
+			return gk2
 		},
 	)
 
@@ -57,8 +66,7 @@ func main() {
 	for _, file := range inFiles {
 		f, err := aio.Open(file)
 		util.Die(err)
-		j := json.NewDecoder(f)
-		util.Die(m.Add(gkReader{j}))
+		util.Die(m.Add(geneKmersIterator(f)))
 	}
 	fout, err := aio.Create(*outFile)
 	util.Die(err)
@@ -66,7 +74,7 @@ func main() {
 	enc := json.NewEncoder(fout)
 
 	fmt.Println("Merging")
-	pt := progress.NewTimer()
+	pt := ptimer.New()
 	for {
 		gk, err := m.Next()
 		if err == io.EOF {
@@ -77,6 +85,14 @@ func main() {
 		pt.Inc()
 	}
 	pt.Done()
+
+	if *del {
+		fmt.Println("Deleting input files")
+		for _, f := range inFiles {
+			util.Die(os.Remove(f))
+		}
+	}
+
 	fmt.Println("Done")
 }
 
@@ -86,14 +102,14 @@ type geneKmers struct {
 	Kmers sets.Set[int]
 }
 
-// A stream of geneKmers instances.
-type gkReader struct {
-	dec *json.Decoder
-}
-
-// Returns the next entry.
-func (r gkReader) next() (geneKmers, error) {
-	var gk geneKmers
-	err := r.dec.Decode(&gk)
-	return gk, err
+func geneKmersIterator(r io.ReadCloser) func() (geneKmers, error) {
+	dec := json.NewDecoder(r)
+	return func() (geneKmers, error) {
+		var gk geneKmers
+		err := dec.Decode(&gk)
+		if err != nil {
+			r.Close()
+		}
+		return gk, err
+	}
 }
