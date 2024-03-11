@@ -2,20 +2,20 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
+	"runtime/debug"
 
-	"github.com/fluhus/biostuff/formats/fastq"
+	"github.com/fluhus/biostuff/formats/bioiter/v2"
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
+	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/sets"
-	"github.com/fluhus/kwas/kmr"
-	"github.com/fluhus/kwas/progress"
+	"github.com/fluhus/gostuff/snm"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -26,6 +26,7 @@ var (
 )
 
 func main() {
+	debug.SetGCPercent(33)
 	flag.Parse()
 
 	fmt.Println("Reading whitelist")
@@ -34,35 +35,30 @@ func main() {
 	wl := sets.Set[string]{}.Add(lines...)
 	fmt.Println(len(wl))
 
-	f, err := aio.Open(*fin)
-	util.Die(err)
-	r := fastq.NewReader(f)
-
 	fmt.Println("Reading fastq")
-	pt := progress.NewTimer()
+	pt := ptimer.New()
 	ps := kmr.ProfileSet[string]{}
-	var fq *fastq.Fastq
-	for fq, err = r.Read(); err == nil; fq, err = r.Read() {
+	for fq, err := range bioiter.Fastq(*fin) {
+		util.Die(err)
 		seq := fq.Sequence
-		rc := sequtil.ReverseComplement(nil, seq)
-		seqs, rcs := string(seq), string(rc)
-		nt, rnt := util.NewNTracker(seq, kmr.K), util.NewNTracker(rc, kmr.K)
-		for i := range seq[:len(seq)-kmr.K+1] {
-			if !nt.NextN() && wl.Has(seqs[i:i+kmr.K]) {
-				ps.Get(seqs[i:i+kmr.K]).Fill(seq, i)
+		for i, ss := range util.NonNSubseqsString(string(seq), kmr.K) {
+			if wl.Has(ss) {
+				ps.Get(ss).Fill(seq, i)
 			}
-			if !rnt.NextN() && wl.Has(rcs[i:i+kmr.K]) {
-				ps.Get(rcs[i:i+kmr.K]).Fill(rc, i)
+		}
+		rc := sequtil.ReverseComplement(nil, seq)
+		for i, ss := range util.NonNSubseqsString(string(rc), kmr.K) {
+			if wl.Has(ss) {
+				ps.Get(ss).Fill(rc, i)
 			}
 		}
 		pt.Inc()
 	}
-	f.Close()
 	pt.Done()
 
 	if *flatten {
 		fmt.Println("Flattening counts")
-		pt := progress.NewTimer()
+		pt := ptimer.New()
 		for _, p := range ps {
 			for i := range p {
 				for j := range p[i] {
@@ -77,7 +73,7 @@ func main() {
 	}
 
 	fmt.Println("Validating")
-	pt = progress.NewTimer()
+	pt = ptimer.New()
 	for kmer, p := range ps {
 		const from = (len(p) - kmr.K) / 2
 		for i, pos := range p[from : from+kmr.K] {
@@ -97,26 +93,18 @@ func main() {
 	pt.Done()
 
 	fmt.Println("Sorting")
-	pt = progress.NewTimer()
-	keys := maps.Keys(ps)
-	keys2bit := map[string]kmr.Kmer{}
-	for _, k := range keys {
-		keys2bit[k] = stringToKmer(k)
-	}
-	slices.SortFunc(keys, func(a, b string) bool {
-		aa, bb := keys2bit[a], keys2bit[b]
-		return bytes.Compare(aa[:], bb[:]) == -1
-	})
+	pt = ptimer.New()
+	keys := snm.Sorted(maps.Keys(ps))
 	pt.Done()
 
 	fmt.Println("Writing")
-	pt = progress.NewTimer()
+	pt = ptimer.New()
 	out, err := aio.Create(*fout)
 	util.Die(err)
 	w := bnry.NewWriter(out)
 	for _, key := range keys {
 		util.Die((&kmr.ProfileTuple{
-			Kmer: keys2bit[key],
+			Kmer: stringToKmer(key),
 			Data: &kmr.ProfileData{
 				P: *ps.Get(key),
 				C: ps.Get(key).SingleSampleCount(),
@@ -130,7 +118,12 @@ func main() {
 	fmt.Println("Done")
 }
 
+// Turns a string into a 2-bit kmer.
 func stringToKmer(s string) kmr.Kmer {
+	if len(s) != kmr.K {
+		panic(fmt.Sprintf("bad string length: %v, want %v",
+			len(s), kmr.K))
+	}
 	kmer2bit := sequtil.DNATo2Bit(nil, []byte(s))
 	kmer := kmr.Kmer(kmer2bit)
 	return kmer
