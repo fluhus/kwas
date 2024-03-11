@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/fluhus/gostuff/gnum"
 	"golang.org/x/exp/slices"
 )
 
@@ -103,7 +102,7 @@ func TwoSided(a, b, c, d int) (float64, float64) {
 	p := pOriginal
 
 	// First side, make a low.
-	diff := gnum.Min2(a, d)
+	diff := min(a, d)
 	a -= diff
 	b += diff
 	c += diff
@@ -121,7 +120,7 @@ func TwoSided(a, b, c, d int) (float64, float64) {
 	}
 
 	// Second side, make a high.
-	diff = gnum.Min2(b, c)
+	diff = min(b, c)
 	a += diff
 	b -= diff
 	c -= diff
