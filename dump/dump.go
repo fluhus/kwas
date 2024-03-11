@@ -6,21 +6,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/fluhus/biostuff/sequtil"
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/sets"
 	"github.com/fluhus/kwas/kmc"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
-	"golang.org/x/exp/slices"
 )
 
 var (
 	inFile   = flag.String("i", "", "Input file")
 	outFile  = flag.String("o", "", "Output file")
-	selfTest = flag.Bool("t", false, "Make additional sanity tests, for debugging")
+	selfTest = flag.Bool("t", false,
+		"Make additional sanity tests, for debugging")
 )
 
 func main() {
@@ -40,8 +41,8 @@ func main() {
 
 	fmt.Println("Sorting")
 	pt = ptimer.New()
-	slices.SortFunc(kmers, func(a, b kmr.Kmer) bool {
-		return a.Less(b)
+	slices.SortFunc(kmers, func(a, b kmr.Kmer) int {
+		return a.Compare(b)
 	})
 	pt.Done()
 
@@ -75,6 +76,7 @@ func main() {
 	fmt.Println("Done")
 }
 
+// Encodes the given kmers in dump format.
 func encodeKmers(kmers []kmr.Kmer) []byte {
 	buf := bytes.NewBuffer(nil)
 	w := kmr.NewWriter(buf)
@@ -84,6 +86,7 @@ func encodeKmers(kmers []kmr.Kmer) []byte {
 	return buf.Bytes()
 }
 
+// Decodes the given dump-encoded kmers.
 func decodeKmers(kmers []byte) ([]kmr.Kmer, error) {
 	r := kmr.NewReader(bytes.NewBuffer(kmers))
 	var result []kmr.Kmer
@@ -100,6 +103,7 @@ func decodeKmers(kmers []byte) ([]kmr.Kmer, error) {
 	return result, nil
 }
 
+// Converts a bool to nice printable string.
 func boolToOK(ok bool) string {
 	if ok {
 		return "ok"
