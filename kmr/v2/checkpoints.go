@@ -1,3 +1,5 @@
+// Kmer checkpoints creation.
+
 package kmr
 
 import (

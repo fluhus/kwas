@@ -13,8 +13,8 @@ import (
 )
 
 func TestCountTuple_add(t *testing.T) {
-	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
-	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{321}}
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{321}}
 	a.Add(b)
 	want := 444
 	if a.Data.Count != want {
@@ -24,15 +24,15 @@ func TestCountTuple_add(t *testing.T) {
 
 func TestCountTuple_bad(t *testing.T) {
 	defer func() { recover() }()
-	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
-	b := &CountTuple{Kmer: Kmer{1, 2, 3}, Data: KmerCount{321}}
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3}, Data: CountData{321}}
 	a.Add(b)
 	t.Fatalf("Add(...) succeeded, want fail")
 }
 
 func TestCountTuple_copy(t *testing.T) {
-	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
-	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
 	c := b.Clone()
 	if !countTuplesEqual(a, b) {
 		t.Fatalf("Copy() changed receiver %v, want %v", b, a)
@@ -43,8 +43,8 @@ func TestCountTuple_copy(t *testing.T) {
 }
 
 func TestCountTuple_encode(t *testing.T) {
-	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
-	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: KmerCount{123}}
+	a := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
+	b := &CountTuple{Kmer: Kmer{1, 2, 3, 4}, Data: CountData{123}}
 	c := &CountTuple{}
 	buf := bytes.NewBuffer(nil)
 	fmt.Println(buf.Len())
@@ -66,13 +66,13 @@ func TestCountTuple_encode(t *testing.T) {
 func TestHasTuple_encode(t *testing.T) {
 	tup := &HasTuple{
 		Kmer: Kmer{},
-		Data: KmerHas{
+		Data: HasData{
 			Samples: []int{5, 8, 0, 7, 1},
 		},
 	}
 	want := &HasTuple{
 		Kmer: Kmer{},
-		Data: KmerHas{
+		Data: HasData{
 			Samples: []int{5, 8, 0, 7, 1},
 		},
 	}

@@ -1,6 +1,4 @@
 // Package kmr provides common utilities for kmer handling.
-//
-// Deprecated: use v2.
 package kmr
 
 import (

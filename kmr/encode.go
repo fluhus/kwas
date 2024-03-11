@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
 )
 
@@ -55,4 +56,30 @@ func (r *Reader) Read() (Kmer, error) {
 
 func NewReader(r io.ByteReader) *Reader {
 	return &Reader{r: r}
+}
+
+// IterKmers iterates over kmers in a dump file.
+func IterKmers(file string, fn func(kmer Kmer) error) error {
+	f, err := aio.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := NewReader(f)
+	for {
+		kmer, err := r.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if err := fn(kmer); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+	return nil
 }
