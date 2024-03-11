@@ -1,4 +1,4 @@
-// Goes over KWAS results and retains only results with low p-value.
+// Goes over KWAS results and splits kmers into significant and non-significant.
 package main
 
 import (
@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"iter"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -17,10 +18,7 @@ import (
 )
 
 var (
-	fin = flag.String("i", "", "Input files glob")
-	// fout   = flag.String("o", "", "Output file")
-	// invert = flag.Bool("n", false,
-	// 	"Invert, retain only results with p-values above the threshold")
+	fin   = flag.String("i", "", "Input files glob")
 	fsig  = flag.String("s", "", "Significant kmers output file")
 	fnsig = flag.String("n", "", "Non-significant kmers output file")
 )
@@ -59,14 +57,9 @@ func filterByPvalFiles(files []string, maxPval float64,
 	if ip == -1 {
 		util.Die(fmt.Errorf("did not find kmer_pval column"))
 	}
-
-	ws := csv.NewWriter(outSig)
-	wn := csv.NewWriter(outNSig)
-	if err := ws.Write(header); err != nil {
-		return err
-	}
-	if err := wn.Write(header); err != nil {
-		return err
+	ikey := slices.Index(header, "key")
+	if ikey == -1 {
+		util.Die(fmt.Errorf("did not find key column"))
 	}
 
 	all, wrote := 0, 0
@@ -75,30 +68,29 @@ func filterByPvalFiles(files []string, maxPval float64,
 			i, len(files), util.Perc(wrote, all))
 	})
 	for _, f := range files {
-		if err := iterCSV(f, header, func(row []string) error {
+		for row, err := range iterCSV(f, header) {
+			if err != nil {
+				return err
+			}
 			pval, err := strconv.ParseFloat(row[ip], 64)
 			if err != nil {
 				return err
 			}
 			if pval <= maxPval {
-				if err := ws.Write(row); err != nil {
+				if _, err := fmt.Fprintf(outSig, "%s\n", row[ikey]); err != nil {
 					return err
 				}
 				wrote++
 			} else {
-				if err := wn.Write(row); err != nil {
+				if _, err := fmt.Fprintf(outNSig, "%s\n", row[ikey]); err != nil {
 					return err
 				}
 			}
 			all++
 			return nil
-		}); err != nil {
-			return err
 		}
 		pt.Inc()
 	}
-	ws.Flush()
-	wn.Flush()
 	pt.Done()
 	return nil
 }
@@ -113,40 +105,45 @@ func readHeader(file string) ([]string, error) {
 	return csv.NewReader(f).Read()
 }
 
-// Calls forEach for each line in a CSV file.
-// If the file's header does not match the given header, returns an error.
-func iterCSV(file string, header []string, forEach func([]string) error) error {
-	f, err := aio.Open(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+// Iterates over lines in a CSV file.
+// If the file's header does not match the given header, yields an error.
+func iterCSV(file string, header []string) iter.Seq2[[]string, error] {
+	return func(yield func([]string, error) bool) {
+		f, err := aio.Open(file)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer f.Close()
 
-	// Check that header matches.
-	r := csv.NewReader(f)
-	h, err := r.Read()
-	if err != nil {
-		return err
-	}
-	if !slices.Equal(h, header) {
-		return fmt.Errorf("mismatching headers: %v %v", h, header)
-	}
+		r := csv.NewReader(f)
 
-	var row []string
-	for row, err = r.Read(); err == nil; row, err = r.Read() {
-		if err := forEach(row); err != nil {
-			return err
+		// Check that header matches.
+		h, err := r.Read()
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		if !slices.Equal(h, header) {
+			yield(nil, fmt.Errorf("mismatching headers: %v %v", h, header))
+			return
+		}
+
+		var row []string
+		for row, err = r.Read(); err == nil; row, err = r.Read() {
+			if !yield(row, err) {
+				return
+			}
+		}
+		if err != io.EOF {
+			yield(nil, err)
 		}
 	}
-	if err != io.EOF {
-		return err
-	}
-	return nil
 }
 
 // Counts the lines in the given files, minus the headers.
 func countLinesFiles(files []string) (int, error) {
-	pt := ptimer.NewMessasge(fmt.Sprintf("{}/%d files done", len(files)))
+	pt := ptimer.NewMessage(fmt.Sprintf("{}/%d files done", len(files)))
 	n := 0
 	for _, f := range files {
 		nf, err := countLines(f)
