@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"io/fs"
 	"math"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/fluhus/biostuff/sequtil"
@@ -19,10 +19,8 @@ import (
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/snm"
 	"github.com/fluhus/kwas/graphs"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
-	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -30,10 +28,6 @@ const (
 
 	indexK       = 50
 	indexSearchK = 37
-
-	// For int-hashing.
-	prime uint64 = 10089886811898868001
-	mask  uint64 = 7544360184296396679
 )
 
 var (
@@ -53,7 +47,7 @@ func main() {
 	var mhs [][]uint64
 	var idx mhindex
 
-	pt := ptimer.NewMessasge("{} kmers indexed")
+	pt := ptimer.NewMessage("{} kmers indexed")
 	idx = mhindex{}
 	ppln.Serial[int, []uint64](*nt,
 		func(push func(int), stop func() bool) error {
@@ -74,7 +68,7 @@ func main() {
 	pt.Done()
 
 	graph := graphs.New(len(kmers))
-	pt = ptimer.NewMessasge("{} kmers done")
+	pt = ptimer.NewMessage("{} kmers done")
 	ptl := &sync.Mutex{}
 
 	ppln.NonSerial[int, [2]int](*nt,
@@ -107,8 +101,8 @@ func main() {
 	fmt.Println(len(comps), "connected components,",
 		util.Percf(len(comps), len(kmers), 0),
 		"of kmers")
-	slices.SortFunc(comps, func(a, b []int) bool {
-		return len(a) > len(b)
+	slices.SortFunc(comps, func(a, b []int) int {
+		return len(b) - len(a)
 	})
 	var lens []int
 	for _, v := range comps {
@@ -122,7 +116,7 @@ func main() {
 	fmt.Println("Component size quantiles:", util.NTiles(20, lens))
 
 	centers := make([]*kmr.HasTuple, 0, len(comps))
-	pt = ptimer.NewMessasge("{} centers calculated")
+	pt = ptimer.NewMessage("{} centers calculated")
 	ppln.Serial(*nt,
 		func(push func([]int), _ func() bool) error {
 			for _, comp := range comps {
@@ -173,21 +167,14 @@ func main() {
 
 // Loads kmers from a HAS file.
 func loadKmers(file string, pt *ptimer.Timer) ([]*kmr.HasTuple, error) {
-	f, err := aio.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
 	var result []*kmr.HasTuple
-	for {
-		tup := &kmr.HasTuple{}
-		err = tup.Decode(f)
+	for tup, err := range kmr.IterTuplesFile[kmr.HasHandler](file) {
 		if err != nil {
-			break
+			return nil, err
 		}
 		if len(tup.Data.Samples) > *nSamples {
-			return nil, fmt.Errorf("kmer has %d samples but #samples (-n) is %d",
+			return nil, fmt.Errorf(
+				"kmer has %d samples but #samples (-n) is %d",
 				len(tup.Data.Samples), *nSamples)
 		}
 		if assertSamplesSorted {
@@ -203,9 +190,6 @@ func loadKmers(file string, pt *ptimer.Timer) ([]*kmr.HasTuple, error) {
 		result = append(result, tup)
 		pt.Inc()
 	}
-	if err != io.EOF {
-		return nil, err
-	}
 	return result, nil
 }
 
@@ -220,7 +204,7 @@ func loadKmersGlob(file string) ([]*kmr.HasTuple, error) {
 	}
 	fmt.Println("Reading kmers from", len(files), "files")
 	var result []*kmr.HasTuple
-	pt := ptimer.NewMessasge("{} kmers loaded")
+	pt := ptimer.NewMessage("{} kmers loaded")
 	for _, f := range files {
 		tups, err := loadKmers(f, pt)
 		if err != nil {
@@ -285,12 +269,7 @@ func (m mhindex) search(i int, mh []uint64, min int) []int {
 func intsMinHash(a []int, k int) []uint64 {
 	mh := minhash.New[uint64](k)
 	for _, i := range a {
-		mh.Push(intHash(i))
+		mh.Push(util.Hash64Int(i))
 	}
 	return mh.View()
-}
-
-// Hashes an integer.
-func intHash[I constraints.Integer](i I) uint64 {
-	return (uint64(i) * prime) ^ mask
 }
