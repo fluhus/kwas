@@ -1,27 +1,47 @@
 package util
 
-type NTracker struct {
-	i    int
-	k    int
-	last int
-	seq  []byte
-}
+import "iter"
 
-func NewNTracker(seq []byte, k int) *NTracker {
-	last := -1
-	for i := range seq[:k] {
-		if seq[i] == 'n' || seq[i] == 'N' {
-			last = i
+func NonNSubseqs(seq []byte, k int) iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		lastn := -1
+		for i, b := range seq[:k-1] {
+			if b == 'n' || b == 'N' {
+				lastn = i
+			}
+		}
+		for i, b := range seq[k-1:] {
+			if b == 'n' || b == 'N' {
+				lastn = i + k - 1
+			}
+			if lastn >= i {
+				continue
+			}
+			if !yield(seq[i : i+k]) {
+				return
+			}
 		}
 	}
-	return &NTracker{0, k, last, seq}
 }
 
-func (t *NTracker) NextN() bool {
-	lasti := t.i + t.k - 1
-	if t.seq[lasti] == 'n' || t.seq[lasti] == 'N' {
-		t.last = lasti
+func NonNSubseqsString(seq string, k int) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		lastn := -1
+		for i, b := range seq[:k-1] {
+			if b == 'n' || b == 'N' {
+				lastn = i
+			}
+		}
+		for i, b := range seq[k-1:] {
+			if b == 'n' || b == 'N' {
+				lastn = i + k - 1
+			}
+			if lastn >= i {
+				continue
+			}
+			if !yield(seq[i : i+k]) {
+				return
+			}
+		}
 	}
-	t.i++
-	return t.last >= t.i-1
 }
