@@ -3,14 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
+	"slices"
 
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
 	"github.com/fluhus/gostuff/ptimer"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/iterx"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -30,15 +30,12 @@ func main() {
 	fmt.Println("Found", len(files), "files to count")
 
 	fmt.Println("Opening files")
-	var streams []*util.Unreader[kmr.Kmer]
+	var streams []*iterx.Iter[kmr.Kmer]
 	for _, file := range files {
-		s, err := newUnreader(file)
-		util.Die(err)
-		streams = append(streams, s)
+		streams = append(streams, iterx.New(kmr.IterKmersFile(file)))
 	}
 
-	wlr, err := newUnreader(*wlFile)
-	util.Die(err)
+	wlr := iterx.New(kmr.IterKmersFile(*wlFile))
 
 	fout, err := aio.Create(*outFile)
 	util.Die(err)
@@ -49,32 +46,27 @@ func main() {
 
 	for _, cp := range kmr.Checkpoints(5000) {
 		has := map[kmr.Kmer][]int{}
-		err := wlr.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
-			has[kmer] = nil
-			return nil
-		})
-		if err != io.EOF {
+		for kmer, err := range wlr.Until(cp.Less) {
 			util.Die(err)
+			has[kmer] = nil
 		}
 		for i, s := range streams {
-			err := s.ReadUntil(cp.Less, func(kmer kmr.Kmer) error {
+			for kmer, err := range s.Until(cp.Less) {
+				util.Die(err)
 				if haskmer, ok := has[kmer]; ok {
 					has[kmer] = append(haskmer, idx[i])
 				}
-				return nil
-			})
-			if err != io.EOF {
-				util.Die(err)
 			}
 		}
 		var slice []kmr.HasTuple
 		for k, v := range has {
 			if len(v) > 0 {
-				slice = append(slice, kmr.HasTuple{Kmer: k, Data: kmr.KmerHas{Samples: v}})
+				slice = append(slice, kmr.HasTuple{
+					Kmer: k, Data: kmr.HasData{Samples: v}})
 			}
 		}
-		slices.SortFunc(slice, func(a, b kmr.HasTuple) bool {
-			return a.Kmer.Less(b.Kmer)
+		slices.SortFunc(slice, func(a, b kmr.HasTuple) int {
+			return a.Kmer.Compare(b.Kmer)
 		})
 		for _, kmer := range slice {
 			util.Die(kmer.Encode(wout))
@@ -86,15 +78,4 @@ func main() {
 	pt.Done()
 
 	fmt.Println("Done")
-}
-
-// Returns an unreader of kmer files.
-func newUnreader(file string) (*util.Unreader[kmr.Kmer], error) {
-	// TODO(amit): Close input file.
-	f, err := aio.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	r := kmr.NewReader(f)
-	return util.NewUnreader(r.Read), nil
 }
