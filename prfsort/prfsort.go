@@ -2,86 +2,89 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"io"
 	"math"
+	"runtime/debug"
 	"sort"
-	"time"
 
 	"github.com/fluhus/gostuff/aio"
 	"github.com/fluhus/gostuff/bnry"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/gostuff/ptimer"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
+	"golang.org/x/exp/constraints"
 )
 
 const (
-	fin  = "final.prf"
-	fout = "sorted.prf"
-	fprc = "percentiles.prf.zst"
+	additiveSmoothing = 1
+)
 
-	tosefet = 1
+var (
+	fin  = flag.String("i", "", "Input profiles")
+	fout = flag.String("o", "", "Sorted output")
+	fprc = flag.String("p", "", "Percentile output")
 )
 
 func main() {
+	debug.SetGCPercent(33)
+	flag.Parse()
+
 	fmt.Println("Reading kmers")
-	t := time.Now()
-	ps, err := loadProfiles(fin)
+	ps, err := loadProfiles(*fin)
 	util.Die(err)
-	fmt.Println("Took", time.Since(t))
-	fmt.Println(len(ps), "kmers")
 
 	fmt.Println("Calculating entropy")
-	t = time.Now()
+	pt := ptimer.New()
 	ents := map[*kmr.ProfileTuple]float64{}
 	for _, p := range ps {
 		ents[p] = avgEntropy(&p.Data.P)
+		pt.Inc()
 	}
-	fmt.Println("Took", time.Since(t))
+	pt.Done()
 
 	fmt.Println("Sorting")
-	t = time.Now()
+	pt = ptimer.New()
 	sort.Slice(ps, func(i, j int) bool {
 		return ents[ps[i]] < ents[ps[j]]
 	})
-	fmt.Println("Took", time.Since(t))
+	pt.Done()
 
 	fmt.Println("Saving profiles")
-	t = time.Now()
-	util.Die(saveProfiles(fout, ps))
-
-	var prc []*kmr.ProfileTuple
-	for i := range make([]struct{}, 11) {
-		idx := i * len(ps) / 10
-		if idx == len(ps) {
-			idx--
-		}
-		prc = append(prc, ps[idx])
+	pt = ptimer.New()
+	if *fout != "" {
+		util.Die(saveProfiles(*fout, ps))
 	}
-	util.Die(saveProfiles(fprc, prc))
-	fmt.Println("Took", time.Since(t))
+
+	if *fprc != "" {
+		var prc []*kmr.ProfileTuple
+		for i := range 11 {
+			idx := idiv(i*(len(ps)-1), 10)
+			prc = append(prc, ps[idx])
+		}
+		util.Die(saveProfiles(*fprc, prc))
+	}
+	pt.Done()
+	fmt.Println("Done")
 }
 
+// Loads profiles from a file.
 func loadProfiles(file string) ([]*kmr.ProfileTuple, error) {
-	f, err := aio.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
+	pt := ptimer.NewMessage("{} kmers")
+	defer pt.Done()
+
 	var result []*kmr.ProfileTuple
-	for {
-		tup := &kmr.ProfileTuple{}
-		err := tup.Decode(f)
-		if err == io.EOF {
-			break
-		}
+	for tup, err := range kmr.IterTuplesFile[kmr.ProfileHandler](file) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, tup)
+		result = append(result, tup.Clone())
+		pt.Inc()
 	}
 	return result, nil
 }
 
+// Saves profiles to a file.
 func saveProfiles(file string, ps []*kmr.ProfileTuple) error {
 	f, err := aio.Create(file)
 	if err != nil {
@@ -97,10 +100,11 @@ func saveProfiles(file string, ps []*kmr.ProfileTuple) error {
 	return nil
 }
 
+// TODO(amit): Remove in favor of gnum.Entropy.
 func entropy(f [4]int64) float64 {
 	sum := 0.0
 	for _, v := range f {
-		sum += float64(v + tosefet)
+		sum += float64(v + additiveSmoothing)
 	}
 	if sum == 0 {
 		return 0
@@ -110,16 +114,22 @@ func entropy(f [4]int64) float64 {
 		if v == 0 {
 			continue
 		}
-		p := float64(v+tosefet) / sum
+		p := float64(v+additiveSmoothing) / sum
 		ent -= p * math.Log2(p)
 	}
 	return ent
 }
 
+// Returns the average entropy with additive smoothing.
 func avgEntropy(p *kmr.Profile) float64 {
 	ent := 0.0
 	for i := range p {
 		ent += entropy(p[i])
 	}
 	return (ent) / float64(len(p))
+}
+
+// An integer division with rounding.
+func idiv[T constraints.Integer](a, b T) T {
+	return T(math.Round(float64(a) / float64(b)))
 }
