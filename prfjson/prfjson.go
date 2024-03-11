@@ -4,12 +4,11 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"io"
 	"math"
 	"os"
 
 	"github.com/fluhus/gostuff/gnum"
-	"github.com/fluhus/kwas/kmr"
+	"github.com/fluhus/kwas/kmr/v2"
 	"github.com/fluhus/kwas/util"
 )
 
@@ -18,14 +17,11 @@ const (
 )
 
 func main() {
-	t := &kmr.ProfileTuple{}
-	var err error
 	i := 0
-
-	r := bufio.NewReader(os.Stdin)
 	j := json.NewEncoder(os.Stdout)
-
-	for err = t.Decode(r); err == nil; err = t.Decode(r) {
+	for t, err := range kmr.IterTuplesReader[kmr.ProfileHandler](
+		bufio.NewReader(os.Stdin)) {
+		util.Die(err)
 		m := tupleToMap(t)
 		if jerr := j.Encode(m); jerr != nil {
 			err = jerr
@@ -36,11 +32,9 @@ func main() {
 			break
 		}
 	}
-	if err != io.EOF {
-		util.Die(err)
-	}
 }
 
+// Converts a profile to a JSON-friendly map.
 func tupleToMap(tup *kmr.ProfileTuple) map[string][]float64 {
 	pos := make([]float64, len(tup.Data.P))
 	for i := range pos {
@@ -71,8 +65,10 @@ func tupleToMap(tup *kmr.ProfileTuple) map[string][]float64 {
 	}
 }
 
+// Like profile but with floats.
 type fprofile [len(kmr.Profile{})][4]float64
 
+// Converts a profile to floats.
 func toFloats(p *kmr.ProfileTuple) fprofile {
 	var result fprofile
 	for i := range p.Data.P {
@@ -83,6 +79,7 @@ func toFloats(p *kmr.ProfileTuple) fprofile {
 	return result
 }
 
+// Normalizes each position to 1.
 func normalize(p *fprofile) {
 	for i := range p {
 		sm := gnum.Sum(p[i][:])
@@ -95,6 +92,7 @@ func normalize(p *fprofile) {
 	}
 }
 
+// TODO(amit): Remove in favor of gnum.Entropy?
 func entropy(f [4]float64) float64 {
 	ent := 0.0
 	for _, ff := range f {
@@ -106,6 +104,7 @@ func entropy(f [4]float64) float64 {
 	return ent
 }
 
+// Normalizes the numbers by entropy, for visualization.
 func normalizeByEntropy(p *fprofile) {
 	for i := range p {
 		factor := 2 - entropy(p[i])
