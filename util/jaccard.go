@@ -1,32 +1,37 @@
 package util
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 const jaccardStrict = true
 
 func jaccardCommon(a, b []int) int {
-	i, j := 0, 0
-	common := 0
-	for i < len(a) && j < len(b) {
-		if jaccardStrict {
-			if i > 0 && a[i] <= a[i-1] {
-				panic(fmt.Sprintf("a[%d] <= a[%d]: %d <= %d",
-					i, i-1, a[i], a[i-1]))
-			}
-			if j > 0 && b[j] <= b[j-1] {
-				panic(fmt.Sprintf("b[%d] <= b[%d]: %d <= %d",
-					j, j-1, b[j], b[j-1]))
-			}
+	if jaccardStrict {
+		if !slices.IsSorted(a) {
+			panic(fmt.Sprintf("a is not sorted: %v", a))
 		}
-		switch {
-		case a[i] < b[j]:
-			i++
-		case a[i] > b[j]:
-			j++
-		default:
-			common++
-			i++
-			j++
+		if !slices.IsSorted(b) {
+			panic(fmt.Sprintf("b is not sorted: %v", b))
+		}
+	}
+
+	j := 0
+	common := 0
+loop:
+	for _, aa := range a {
+		for _, bb := range b[j:] {
+			switch {
+			case aa < bb:
+				continue loop
+			case aa > bb:
+				j++
+			default:
+				j++
+				common++
+				continue loop
+			}
 		}
 	}
 	return common

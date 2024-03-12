@@ -1,9 +1,11 @@
 package util
 
 import (
+	"math/rand/v2"
 	"testing"
 
 	"github.com/fluhus/gostuff/gnum"
+	"github.com/fluhus/gostuff/snm"
 )
 
 func TestJaccard(t *testing.T) {
@@ -46,5 +48,15 @@ func TestJaccardDual(t *testing.T) {
 			t.Errorf("JaccardDualDist(%v,%v)=%v, want %v",
 				test.a, test.b, got, want)
 		}
+	}
+}
+
+func BenchmarkJaccardDist(b *testing.B) {
+	const n = 1000
+	x := snm.Sorted(rand.Perm(n * 2)[:n])
+	y := snm.Sorted(rand.Perm(n * 2)[:n])
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JaccardDist(x, y)
 	}
 }
