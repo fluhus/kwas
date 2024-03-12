@@ -9,6 +9,7 @@ import (
 	"github.com/fluhus/gostuff/jio"
 	"github.com/fluhus/gostuff/ptimer"
 	"github.com/fluhus/gostuff/sets"
+	"github.com/fluhus/gostuff/snm"
 	"github.com/fluhus/kwas/gofisher"
 	"github.com/fluhus/kwas/util"
 	"golang.org/x/exp/maps"
@@ -48,7 +49,7 @@ func main() {
 	gofisher.Clear()
 	pt.Done()
 
-	tests = util.FilterSlice(tests, func(f fisherResult) bool {
+	tests = snm.FilterSlice(tests, func(f fisherResult) bool {
 		return f.pval <= 0.05/float64(len(tests))
 	})
 	fmt.Println(len(tests), "rnames are significant")
@@ -57,7 +58,7 @@ func main() {
 	})
 	fmt.Println(tests[:3])
 
-	sig := util.MapSlice(tests, func(f fisherResult) string {
+	sig := snm.SliceToSlice(tests, func(f fisherResult) string {
 		return f.rname
 	})
 	found := maps.Keys(sets.Set[string]{}.Add(maps.Keys(sigCounts)...).Add(
