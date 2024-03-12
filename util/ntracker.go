@@ -2,6 +2,8 @@ package util
 
 import "iter"
 
+// NonNSubseqs iterates over k-long subsequences of seq that do not contain
+// an n/N character. Yields the index and the subsequence.
 func NonNSubseqs(seq []byte, k int) iter.Seq2[int, []byte] {
 	return func(yield func(int, []byte) bool) {
 		lastn := -1
@@ -24,6 +26,8 @@ func NonNSubseqs(seq []byte, k int) iter.Seq2[int, []byte] {
 	}
 }
 
+// NonNSubseqsString iterates over k-long subsequences of seq that do not
+// contain an n/N character. Yields the index and the subsequence.
 func NonNSubseqsString(seq string, k int) iter.Seq2[int, string] {
 	return func(yield func(int, string) bool) {
 		lastn := -1

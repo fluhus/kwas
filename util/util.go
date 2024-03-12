@@ -4,7 +4,6 @@ package util
 import (
 	"bufio"
 	"bytes"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"math"
@@ -32,24 +31,7 @@ func OpenOrStdin(f string, stdin string) (io.ReadCloser, error) {
 	return aio.Open(f)
 }
 
-func SaveGob(file string, v interface{}) error {
-	f, err := aio.Create(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return gob.NewEncoder(f).Encode(v)
-}
-
-func LoadGob(file string, v interface{}) error {
-	f, err := aio.Open(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return gob.NewDecoder(f).Decode(v)
-}
-
+// ReadLines returns the lines in the given reader.
 func ReadLines(r io.ReadCloser, err error) ([]string, error) {
 	if err != nil {
 		return nil, err
