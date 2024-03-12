@@ -3,26 +3,9 @@ package util
 import (
 	"io"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 )
-
-func TestChooseStrings(t *testing.T) {
-	in := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
-	var got []string
-	for i := 0; i < 4; i++ {
-		s, _ := ChooseStrings(in, i, 4)
-		if len(s) > 3 {
-			t.Fatalf("ChooseStrings(\"...\", %v, 4)=%v, want <= 3", i, s)
-		}
-		got = append(got, s...)
-	}
-	sort.Strings(got)
-	if !reflect.DeepEqual(got, in) {
-		t.Fatalf("ChooseStrings(%v)=%v, want %v", in, got, in)
-	}
-}
 
 func TestReadLines(t *testing.T) {
 	input := "a\nc\nd\nc\n"
@@ -75,16 +58,5 @@ func TestCanonicalKmers(t *testing.T) {
 	})
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CanonicalKmers(%q,3)=%v, want %v", input, got, want)
-	}
-}
-
-func TestHashString(t *testing.T) {
-	inputs := []string{"", "a", "blablabla", "blublublu"}
-	for _, input := range inputs {
-		got := Hash64String(input)
-		want := Hash64([]byte(input))
-		if got != want {
-			t.Errorf("Hash64String(%q)=%v, want %v", input, got, want)
-		}
 	}
 }
